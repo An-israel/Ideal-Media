@@ -1,0 +1,54 @@
+import { notFound } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { CourseEditor, type EditorModule } from "./course-editor";
+
+export default async function EditCoursePage({
+  params,
+}: {
+  params: Promise<{ courseId: string }>;
+}) {
+  const { courseId } = await params;
+  const supabase = await createClient();
+
+  const { data: course } = await supabase
+    .from("courses")
+    .select("id, title, description, is_published")
+    .eq("id", courseId)
+    .single();
+  if (!course) notFound();
+
+  const { data: modules } = await supabase
+    .from("modules")
+    .select("id, position, title, content_type, content_url, content_body, assignments(instructions)")
+    .eq("course_id", courseId)
+    .order("position", { ascending: true });
+
+  type Row = {
+    id: string;
+    position: number;
+    title: string;
+    content_type: EditorModule["content_type"];
+    content_url: string | null;
+    content_body: string | null;
+    assignments: { instructions: string }[];
+  };
+  const editorModules: EditorModule[] = ((modules ?? []) as unknown as Row[]).map((m) => ({
+    id: m.id,
+    position: m.position,
+    title: m.title,
+    content_type: m.content_type,
+    content_url: m.content_url ?? "",
+    content_body: m.content_body ?? "",
+    instructions: m.assignments?.[0]?.instructions ?? "",
+  }));
+
+  return (
+    <CourseEditor
+      courseId={course.id}
+      initialTitle={course.title}
+      initialDescription={course.description ?? ""}
+      isPublished={course.is_published}
+      modules={editorModules}
+    />
+  );
+}

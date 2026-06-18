@@ -84,6 +84,24 @@ export async function signUpAction(input: SignupInput): Promise<SignupResult> {
   const { error: memberErr } = await admin.from("subunit_members").insert(memberships);
   if (memberErr) return cleanup(memberErr.message);
 
+  // Auto-enroll into any already-published courses in the primary subunit
+  // (Section 5: primary-subunit courses are auto-enrolled).
+  const { data: primaryCourses } = await admin
+    .from("courses")
+    .select("id")
+    .eq("subunit_id", primarySubunitId)
+    .eq("is_published", true);
+  if (primaryCourses && primaryCourses.length) {
+    await admin.from("enrollments").upsert(
+      primaryCourses.map((c) => ({
+        user_id: userId,
+        course_id: c.id,
+        status: "enrolled" as const,
+      })),
+      { onConflict: "user_id,course_id", ignoreDuplicates: true }
+    );
+  }
+
   // Welfare sees every new member (Section 6 / 10).
   await admin
     .from("welfare_followups")
