@@ -6,6 +6,7 @@ import { Menu, X, Bell, LogOut } from "lucide-react";
 import type { Role } from "@/lib/constants";
 import { Nav } from "@/components/app/nav";
 import { Guide } from "@/components/app/guide";
+import { BackButton } from "@/components/app/back-button";
 import { Wordmark } from "@/components/wordmark";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -61,7 +62,7 @@ export function AppShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface)]/80 px-4 py-3 backdrop-blur md:px-6">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="icon"
@@ -70,9 +71,7 @@ export function AppShell({
             >
               <Menu className="h-5 w-5" />
             </Button>
-            <span className="text-sm text-[var(--text-muted)] md:hidden">
-              <Wordmark />
-            </span>
+            <BackButton />
           </div>
           <div className="flex items-center gap-1">
             <Link href="/notifications" className="relative">
