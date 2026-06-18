@@ -1,17 +1,57 @@
+import { createClient } from "@/lib/supabase/server";
+import { getWelfareTeam, getMissedCounts } from "@/lib/welfare-queries";
 import { PageHeader } from "@/components/app/page-header";
-import { PhasePlaceholder } from "@/components/app/phase-placeholder";
+import { WelfareBoard, type FollowupItem } from "./welfare-board";
+import type { WelfareReason, WelfareStatus } from "@/lib/database.types";
 
-export default function WelfarePage() {
+export default async function WelfarePage() {
+  const supabase = await createClient();
+
+  const { data: followups } = await supabase
+    .from("welfare_followups")
+    .select(
+      "id, reason, level, status, notes, assigned_to, last_contact_at, created_at, user_id, profiles!welfare_followups_user_id_fkey(full_name, whatsapp_number, member_status)"
+    )
+    .neq("status", "resolved")
+    .order("created_at", { ascending: false });
+
+  type Row = {
+    id: string;
+    reason: WelfareReason;
+    level: number;
+    status: WelfareStatus;
+    notes: string | null;
+    assigned_to: string | null;
+    last_contact_at: string | null;
+    created_at: string;
+    user_id: string;
+    profiles: { full_name: string; whatsapp_number: string | null; member_status: string } | null;
+  };
+  const rows = (followups ?? []) as unknown as Row[];
+
+  const [team, missed] = await Promise.all([
+    getWelfareTeam(),
+    getMissedCounts(rows.filter((r) => r.reason === "missed_service").map((r) => r.user_id)),
+  ]);
+
+  const items: FollowupItem[] = rows.map((r) => ({
+    id: r.id,
+    memberName: r.profiles?.full_name ?? "Member",
+    whatsapp: r.profiles?.whatsapp_number ?? null,
+    reason: r.reason,
+    level: r.level,
+    status: r.status,
+    notes: r.notes ?? "",
+    assignedTo: r.assigned_to,
+    lastContactAt: r.last_contact_at,
+    createdAt: r.created_at,
+    missedCount: r.reason === "missed_service" ? missed.get(r.user_id) ?? null : null,
+  }));
+
   return (
     <div>
-      <PageHeader
-        title="Welfare"
-        description="Auto-populated follow-up board."
-      />
-      <PhasePlaceholder
-        phase="Phase 6 — Welfare board"
-        note="New-member and missed-service follow-ups (auto-flagged) surface here with level/status tracking, notes, and assignment. New-member flags are already being created at signup."
-      />
+      <PageHeader title="Welfare" description="Members flagged for follow-up — auto-populated." />
+      <WelfareBoard items={items} team={team} />
     </div>
   );
 }

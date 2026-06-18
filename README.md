@@ -17,7 +17,7 @@ Anthropic Claude API for attendance parsing.
 | 3 | Courses — builder, player, sequential gating, WhatsApp submission, secondary-course apply + leader approvals | ✅ Done |
 | 4 | Leader dashboard — members list, member detail (course/attendance breakdown + performance), approvals queue | ✅ Done |
 | 5 | Attendance + AI ingestion — upload → SheetJS → Claude (forced tool-use) → review → commit + welfare auto-flag | ✅ Done |
-| 6 | Welfare + roster | 🟡 Partial (new-member + missed-service auto-flagging done; board + roster UI pending) |
+| 6 | Welfare board (filters, level/status/notes/assignment, WhatsApp) + secretary roster (bulk status, recently-missed view) | ✅ Done |
 | 7 | Super admin | 🟡 Scaffolded |
 | 8 | Notifications, performance, polish | 🟡 Partial (performance score + bell wired) |
 
