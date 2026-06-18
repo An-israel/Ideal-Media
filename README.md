@@ -18,8 +18,8 @@ Anthropic Claude API for attendance parsing.
 | 4 | Leader dashboard — members list, member detail (course/attendance breakdown + performance), approvals queue | ✅ Done |
 | 5 | Attendance + AI ingestion — upload → SheetJS → Claude (forced tool-use) → review → commit + welfare auto-flag | ✅ Done |
 | 6 | Welfare board (filters, level/status/notes/assignment, WhatsApp) + secretary roster (bulk status, recently-missed view) | ✅ Done |
-| 7 | Super admin | 🟡 Scaffolded |
-| 8 | Notifications, performance, polish | 🟡 Partial (performance score + bell wired) |
+| 7 | Super admin — analytics, members, roles, subunits, activities + threshold, COC + question bank | ✅ Done |
+| 8 | Notifications, performance, polish | 🟡 Partial (bell + notifications, composite performance, role-aware nav) |
 
 ## Getting started
 
