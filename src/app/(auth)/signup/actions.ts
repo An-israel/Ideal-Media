@@ -1,0 +1,93 @@
+"use server";
+
+import { createAdminClient } from "@/lib/supabase/admin";
+
+export interface SignupInput {
+  fullName: string;
+  email: string;
+  phone: string;
+  location: string;
+  password: string;
+  whatsappNumber: string;
+  primarySubunitId: string;
+  secondarySubunitIds: string[];
+}
+
+export interface SignupResult {
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * Provisions a new member (Section 6): auth user → profile → `member` role →
+ * subunit_members (one primary + any secondaries) → a `new_member` welfare
+ * followup. Runs with the admin client (privileged) after validating input.
+ */
+export async function signUpAction(input: SignupInput): Promise<SignupResult> {
+  const { fullName, email, password, primarySubunitId } = input;
+
+  if (!fullName.trim() || !email.trim() || !password) {
+    return { ok: false, error: "Please fill in all required fields." };
+  }
+  if (password.length < 8) {
+    return { ok: false, error: "Password must be at least 8 characters." };
+  }
+  if (!primarySubunitId) {
+    return { ok: false, error: "Please select your primary subunit." };
+  }
+
+  const admin = createAdminClient();
+
+  // Create the auth user (email pre-confirmed so they can sign in immediately).
+  const { data: created, error: createErr } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { full_name: fullName },
+  });
+  if (createErr || !created.user) {
+    return { ok: false, error: createErr?.message ?? "Could not create account." };
+  }
+
+  const userId = created.user.id;
+
+  const cleanup = async (message: string): Promise<SignupResult> => {
+    await admin.auth.admin.deleteUser(userId);
+    return { ok: false, error: message };
+  };
+
+  const { error: profileErr } = await admin.from("profiles").insert({
+    id: userId,
+    full_name: fullName,
+    email,
+    phone: input.phone || null,
+    location: input.location || null,
+    whatsapp_number: input.whatsappNumber || null,
+  });
+  if (profileErr) return cleanup(profileErr.message);
+
+  const { error: roleErr } = await admin
+    .from("user_roles")
+    .insert({ user_id: userId, role: "member" });
+  if (roleErr) return cleanup(roleErr.message);
+
+  const memberships = [
+    { subunit_id: primarySubunitId, user_id: userId, membership_type: "primary" as const },
+    ...input.secondarySubunitIds
+      .filter((id) => id && id !== primarySubunitId)
+      .map((id) => ({
+        subunit_id: id,
+        user_id: userId,
+        membership_type: "secondary" as const,
+      })),
+  ];
+  const { error: memberErr } = await admin.from("subunit_members").insert(memberships);
+  if (memberErr) return cleanup(memberErr.message);
+
+  // Welfare sees every new member (Section 6 / 10).
+  await admin
+    .from("welfare_followups")
+    .insert({ user_id: userId, reason: "new_member", auto_flagged: true });
+
+  return { ok: true };
+}

@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+/* Dark mode driven by a `class` on <html> (next-themes). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------------------------------------------------------------------------
+ * Design tokens (Section 15). Defined as CSS variables, exposed to Tailwind
+ * via @theme inline so utilities like bg-surface / text-muted / border-border
+ * resolve to these values and flip with the theme.
+ * ------------------------------------------------------------------------- */
+:root {
+  --bg: #fbfbfa;
+  --surface: #ffffff;
+  --elevated: #ffffff;
+  --border: #e7e7e4;
+  --text: #18181b;
+  --text-muted: #6b6b73;
+  --accent: #4f46e5;
+  --accent-foreground: #ffffff;
+  --accent-hover: #4338ca;
+  --ring: #6366f1;
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+
+  --radius: 0.75rem;
+}
+
+.dark {
+  --bg: #0b0c0e;
+  --surface: #15171a;
+  --elevated: #1c1f23;
+  --border: #26292e;
+  --text: #f4f4f5;
+  --text-muted: #a1a1aa;
+  --accent: #818cf8;
+  --accent-foreground: #0b0c0e;
+  --accent-hover: #a5b4fc;
+  --ring: #818cf8;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-hover: var(--accent-hover);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 0.25rem);
+  --radius-2xl: 1rem;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+/* Thin, restrained scrollbars to match the Apple/Claude aesthetic. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 9999px;
+}
