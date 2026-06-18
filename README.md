@@ -19,7 +19,7 @@ Anthropic Claude API for attendance parsing.
 | 5 | Attendance + AI ingestion — upload → SheetJS → Claude (forced tool-use) → review → commit + welfare auto-flag | ✅ Done |
 | 6 | Welfare board (filters, level/status/notes/assignment, WhatsApp) + secretary roster (bulk status, recently-missed view) | ✅ Done |
 | 7 | Super admin — analytics, members, roles, subunits, activities + threshold, COC + question bank | ✅ Done |
-| 8 | Notifications, performance, polish | 🟡 Partial (bell + notifications, composite performance, role-aware nav) |
+| 8 | Notifications (bell + triggers + mark-read), composite performance, loading/empty states, RLS audit | ✅ Done (Supabase Realtime left as the documented nice-to-have) |
 
 ## Getting started
 

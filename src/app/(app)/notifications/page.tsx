@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Bell } from "lucide-react";
+import { MarkRead } from "./mark-read";
 
 export default async function NotificationsPage() {
   const supabase = await createClient();
@@ -12,9 +13,11 @@ export default async function NotificationsPage() {
     .limit(50);
 
   const rows = notifications ?? [];
+  const hasUnread = rows.some((n) => !n.is_read);
 
   return (
     <div>
+      <MarkRead hasUnread={hasUnread} />
       <PageHeader title="Notifications" />
       {rows.length === 0 ? (
         <Card>
