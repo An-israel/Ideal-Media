@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { GraduationCap, ClipboardCheck, ArrowRight } from "lucide-react";
+import { GraduationCap, ClipboardCheck, ArrowRight, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,7 +28,24 @@ export default async function LeaderPage() {
         title="Leader"
         description="Build courses and work through your approvals queue."
       />
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Link href="/leader/members">
+          <Card className="h-full transition-colors hover:border-[var(--accent)]">
+            <CardContent className="flex items-start gap-4 pt-6">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent)]/10 text-[var(--accent)]">
+                <Users className="h-5 w-5" />
+              </span>
+              <div className="flex-1">
+                <p className="font-medium">Members</p>
+                <p className="text-sm text-[var(--text-muted)]">
+                  Progress, attendance, and performance per member.
+                </p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-[var(--text-muted)]" />
+            </CardContent>
+          </Card>
+        </Link>
+
         <Link href="/leader/courses">
           <Card className="h-full transition-colors hover:border-[var(--accent)]">
             <CardContent className="flex items-start gap-4 pt-6">
@@ -68,7 +85,7 @@ export default async function LeaderPage() {
       </div>
 
       <p className="mt-6 text-sm text-[var(--text-muted)]">
-        Members, attendance view, and per-member performance arrive in Phase 4.
+        Member attendance fills in once the secretary commits uploads (Phase 5).
       </p>
     </div>
   );

@@ -15,7 +15,7 @@ Anthropic Claude API for attendance parsing.
 | 2 | Code-of-conduct gate — read → quiz (reshuffled) → pass, server-side grading, `coc_completed` gating | ✅ Done |
 | — | **Full DB schema + RLS for every table** (the security model is in place up front) | ✅ Done |
 | 3 | Courses — builder, player, sequential gating, WhatsApp submission, secondary-course apply + leader approvals | ✅ Done |
-| 4 | Leader dashboard (members, attendance view, performance) — approvals queue already built in Phase 3 | 🟡 Partial |
+| 4 | Leader dashboard — members list, member detail (course/attendance breakdown + performance), approvals queue | ✅ Done |
 | 5 | Attendance + AI ingestion | 🟡 Scaffolded |
 | 6 | Welfare + roster | 🟡 Scaffolded (new-member flags already created at signup) |
 | 7 | Super admin | 🟡 Scaffolded |
