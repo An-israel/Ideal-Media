@@ -15,7 +15,7 @@ export const DEFAULT_MISSED_SERVICE_THRESHOLD = 2;
 export const COC_PASS_THRESHOLD = 1.0;
 
 /** Number of questions pulled per COC quiz attempt (Section 6). */
-export const COC_QUIZ_SIZE = 6;
+export const COC_QUIZ_SIZE = 4;
 
 /** Guidance: warn (don't block) below this many modules per course (Section 8). */
 export const MIN_MODULES_GUIDANCE = 7;

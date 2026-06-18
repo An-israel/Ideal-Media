@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Menu, X, Bell, LogOut } from "lucide-react";
 import type { Role } from "@/lib/constants";
 import { Nav } from "@/components/app/nav";
+import { Guide } from "@/components/app/guide";
 import { Wordmark } from "@/components/wordmark";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -90,6 +91,8 @@ export function AppShell({
         </header>
         <main className="flex-1 p-4 md:p-8">{children}</main>
       </div>
+
+      <Guide roles={roles} />
     </div>
   );
 }
