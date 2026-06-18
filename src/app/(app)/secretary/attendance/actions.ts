@@ -5,6 +5,7 @@ import { getSessionRoles } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   parseAttendance,
+  parseAttendanceImage,
   readSheetRows,
   type RosterMember,
 } from "@/lib/attendance-parser";
@@ -54,10 +55,12 @@ export async function createAndParseUpload(formData: FormData): Promise<ParseUpl
   const serviceDate = String(formData.get("serviceDate") ?? "");
   if (!file || !activityId || !serviceDate) throw new Error("Missing required fields.");
 
-  // Guardrails: type + size.
+  // Guardrails: type + size. Accept spreadsheets OR a photo of the sheet.
   const name = file.name.toLowerCase();
-  if (!ACCEPTED_UPLOAD_EXT.some((ext) => name.endsWith(ext))) {
-    throw new Error("Only .xlsx or .csv files are accepted.");
+  const isSheet = ACCEPTED_UPLOAD_EXT.some((ext) => name.endsWith(ext));
+  const isImage = file.type.startsWith("image/") || /\.(jpe?g|png|webp)$/.test(name);
+  if (!isSheet && !isImage) {
+    throw new Error("Upload a .xlsx/.csv spreadsheet or a photo (jpg/png) of the sheet.");
   }
   if (file.size > MAX_UPLOAD_BYTES) throw new Error("File exceeds the 5MB limit.");
 
@@ -89,12 +92,14 @@ export async function createAndParseUpload(formData: FormData): Promise<ParseUpl
     .update({ raw_storage_path: storagePath })
     .eq("id", upload.id);
 
-  const rows = readSheetRows(buffer);
   const roster = await buildRoster(admin);
+  const rows = isImage ? [] : readSheetRows(buffer);
 
   let proposal: AiProposal;
   try {
-    proposal = await parseAttendance(rows, roster);
+    proposal = isImage
+      ? await parseAttendanceImage(buffer.toString("base64"), file.type || "image/jpeg", roster)
+      : await parseAttendance(rows, roster);
   } catch {
     // Never commit on parse error — fall back to a manual-review proposal with
     // everyone listed as not-on-sheet so the secretary can map by hand.

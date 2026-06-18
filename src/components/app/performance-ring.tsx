@@ -16,7 +16,7 @@ export function PerformanceRing({
   const filled = c * Math.max(0, Math.min(1, value));
 
   return (
-    <div className="flex items-center gap-5">
+    <div className="flex w-full flex-col items-center gap-4">
       <div className="relative" style={{ width: size, height: size }}>
         <svg width={size} height={size} className="-rotate-90">
           <circle
@@ -43,7 +43,7 @@ export function PerformanceRing({
           <span className="text-xs text-[var(--text-muted)]">Performance</span>
         </div>
       </div>
-      <div className="space-y-2 text-sm">
+      <div className="w-full max-w-[260px] space-y-1.5 text-sm">
         <Part label="Course progress" value={parts.progress} />
         <Part label="Assignment approval" value={parts.assignments} />
         <Part label="Attendance" value={parts.attendance} />
@@ -54,9 +54,9 @@ export function PerformanceRing({
 
 function Part({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="w-36 text-[var(--text-muted)]">{label}</span>
-      <span className="font-medium">{pct(value)}%</span>
+    <div className="flex items-center justify-between gap-3">
+      <span className="truncate text-[var(--text-muted)]">{label}</span>
+      <span className="shrink-0 font-medium">{pct(value)}%</span>
     </div>
   );
 }

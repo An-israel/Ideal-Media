@@ -71,6 +71,21 @@ const PROPOSAL_TOOL: Anthropic.Tool = {
   },
 };
 
+function rosterPrompt(roster: RosterMember[]): string {
+  return (
+    "ROSTER (match against these — use the exact `id` for roster_id):\n" +
+    JSON.stringify(roster, null, 2)
+  );
+}
+
+function extractProposal(response: Anthropic.Message): AiProposal {
+  const toolBlock = response.content.find((b) => b.type === "tool_use");
+  if (!toolBlock || toolBlock.type !== "tool_use") {
+    throw new Error("Parser did not return a tool result.");
+  }
+  return validateProposal(toolBlock.input);
+}
+
 function validateProposal(input: unknown): AiProposal {
   const p = input as Partial<AiProposal> | null;
   if (
@@ -115,11 +130,55 @@ export async function parseAttendance(
     messages: [{ role: "user", content: prompt }],
   });
 
-  const toolBlock = response.content.find((b) => b.type === "tool_use");
-  if (!toolBlock || toolBlock.type !== "tool_use") {
-    throw new Error("Parser did not return a tool result.");
-  }
-  return validateProposal(toolBlock.input);
+  return extractProposal(response);
+}
+
+type ImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+
+/**
+ * Reads attendance from a PHOTO of a sheet/register (Claude vision) and maps it
+ * to the roster — same strict tool-use JSON as the spreadsheet path. Lets the
+ * secretary snap a picture instead of typing up a spreadsheet (Section 12).
+ */
+export async function parseAttendanceImage(
+  base64: string,
+  mediaType: string,
+  roster: RosterMember[]
+): Promise<AiProposal> {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+  const media = (["image/jpeg", "image/png", "image/gif", "image/webp"].includes(mediaType)
+    ? mediaType
+    : "image/jpeg") as ImageMediaType;
+
+  const prompt =
+    "The image is a photo of a church media team's attendance sheet or register " +
+    "(it may be printed or handwritten).\n\n" +
+    rosterPrompt(roster) +
+    "\n\nRead every person listed in the photo and match each to exactly one roster " +
+    "member by name, tolerating nicknames, reordered first/last names, casing, and " +
+    "minor misspellings. Determine each person's status from the row (a tick/check/" +
+    "'P'/'present'/highlight means present; blank, dash, 'A', or crossed-out means " +
+    "absent; note 'traveled'/'excused' if written). Do not invent members. Put names " +
+    "you cannot confidently match in unmatched_sheet_rows, and roster members with no " +
+    "row in roster_not_on_sheet. Report your result via the tool.";
+
+  const response = await client.messages.create({
+    model: ATTENDANCE_PARSE_MODEL,
+    max_tokens: 8000,
+    tools: [PROPOSAL_TOOL],
+    tool_choice: { type: "tool", name: PROPOSAL_TOOL.name },
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: media, data: base64 } },
+          { type: "text", text: prompt },
+        ],
+      },
+    ],
+  });
+
+  return extractProposal(response);
 }
 
 /** Normalizes a free-text status to our enum (used for unmatched rows). */
