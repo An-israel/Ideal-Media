@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sparkles, X, ChevronDown, PartyPopper } from "lucide-react";
+import { Sparkles, X, ChevronDown } from "lucide-react";
 import type { Role } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 
 const STORAGE_KEY = "im-guide-dismissed";
 
@@ -16,77 +15,61 @@ function sectionsFor(roles: Role[]): Section[] {
     {
       id: "basics",
       emoji: "🎬",
-      title: "The basics (everyone)",
+      title: "The basics",
       steps: [
-        "Your **Dashboard** shows your subunits and a performance ring — it fills in as you complete courses and show up to service.",
-        "Open **My Courses** to learn. Work through a course one module at a time.",
-        "A module unlocks only after your leader approves the one before it — so go in order. 🔓",
-        "When you finish a module's task, tap **Submit to leader on WhatsApp**. Your work travels over WhatsApp; your leader approves it back here.",
-        "The 🔔 bell at the top tells you when something's approved or needs a redo.",
+        "**Dashboard** — your subunits and a performance ring that grows as you do courses and attend service.",
+        "**My Courses** — learn one module at a time; they unlock in order. 🔓",
+        "Finished a task? Tap **Submit to leader on WhatsApp** — your leader approves it back here.",
+        "The 🔔 bell shows approvals and redo requests.",
       ],
     },
   ];
-
-  if (has("subunit_leader") || has("super_admin")) {
+  if (has("subunit_leader") || has("super_admin"))
     sections.push({
       id: "leader",
       emoji: "🧑‍🏫",
-      title: "Leading a subunit",
+      title: "Leading",
       steps: [
-        "**Build a course:** Leader → **Courses** → **New course** (top-right). Add 7–10 modules; each gets content (article, YouTube, file…) and one assignment.",
-        "Hit **Publish** when it's ready — members in your subunit get enrolled automatically. 🎉",
-        "**Approvals:** Leader → **Approvals** is your inbox — approve or send back assignment submissions, and accept course applications.",
-        "**Members:** Leader → **Members** shows each person's progress, attendance, and performance.",
+        "**Build:** Leader → Courses → New course → add modules (content + 1 assignment) → **Publish**.",
+        "**Approvals** — review submissions and course applications.",
+        "**Members** — each person's progress, attendance, performance.",
       ],
     });
-  }
-
-  if (has("secretary") || has("super_admin")) {
+  if (has("secretary") || has("super_admin"))
     sections.push({
       id: "secretary",
       emoji: "🗂️",
-      title: "Secretary duties",
+      title: "Secretary",
       steps: [
-        "**Upload attendance:** Secretary → **Attendance** → pick the activity and date, drop in the sheet (.xlsx or .csv).",
-        "The AI matches names to your roster. You **review** it — fix any low-confidence guesses — then **Commit**. Nothing is saved until you commit. ✅",
-        "**Roster:** set member statuses. Mark someone **traveled** and they won't be flagged for missing service.",
+        "**Attendance** — pick activity + date, upload a sheet **or snap a photo** 📸. AI maps names → review → **Commit**.",
+        "**Roster** — set member status. “Traveled” skips missed-service flags.",
       ],
     });
-  }
-
-  if (has("welfare") || has("super_admin")) {
+  if (has("welfare") || has("super_admin"))
     sections.push({
       id: "welfare",
       emoji: "💛",
-      title: "Welfare follow-ups",
+      title: "Welfare",
       steps: [
-        "The **Welfare** board fills itself — new members and anyone missing service show up automatically. No hunting required.",
-        "On each card: set the **level** (1→3), update **status**, jot **notes**, **assign** a teammate, or message them on **WhatsApp**.",
-        "Tap **Resolve** when you've closed the loop and it leaves the board.",
+        "The board fills itself — new members + anyone missing service.",
+        "Per card: set level, status, notes, assign, WhatsApp, then **Resolve**.",
       ],
     });
-  }
-
-  if (has("super_admin")) {
+  if (has("super_admin"))
     sections.push({
       id: "admin",
       emoji: "👑",
-      title: "Director (admin)",
+      title: "Admin",
       steps: [
-        "**Admin → Roles** is where you promote people: subunit leaders, the secretary, and welfare team.",
-        "**Subunits, Activities, Code of Conduct** are all editable — including the missed-service threshold and the quiz questions.",
-        "**Overview** gives you charts and totals across the whole department.",
+        "**Roles** — promote leaders, secretary, welfare.",
+        "**Subunits, Activities, Code of Conduct, Overview** all live here.",
       ],
     });
-  }
-
   return sections;
 }
 
-/** Renders simple **bold** markup as <strong>. */
 function renderStep(text: string) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
-  return parts.map((p, i) =>
+  return text.split(/(\*\*[^*]+\*\*)/g).map((p, i) =>
     p.startsWith("**") && p.endsWith("**") ? (
       <strong key={i} className="font-semibold text-[var(--text)]">
         {p.slice(2, -2)}
@@ -99,11 +82,10 @@ function renderStep(text: string) {
 
 export function Guide({ roles }: { roles: Role[] }) {
   const [open, setOpen] = useState(false);
-  const [openSection, setOpenSection] = useState<string>("basics");
+  const [openSection, setOpenSection] = useState<string>("");
   const sections = sectionsFor(roles);
 
   useEffect(() => {
-    // Auto-open once, the very first time (intentional one-shot on mount).
     if (!localStorage.getItem(STORAGE_KEY)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setOpen(true);
@@ -117,10 +99,9 @@ export function Guide({ roles }: { roles: Role[] }) {
 
   return (
     <>
-      {/* Floating launcher */}
       <button
-        onClick={() => setOpen(true)}
-        className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 text-sm font-medium shadow-lg transition-transform hover:scale-105"
+        onClick={() => setOpen((o) => !o)}
+        className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2 text-sm font-medium shadow-lg transition-transform hover:scale-105"
         aria-label="Open the guide"
       >
         <Sparkles className="h-4 w-4 text-[var(--accent)]" />
@@ -128,74 +109,69 @@ export function Guide({ roles }: { roles: Role[] }) {
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col border-l border-[var(--border)] bg-[var(--surface)] shadow-xl">
-            <div className="flex items-start justify-between gap-3 border-b border-[var(--border)] p-5">
-              <div className="flex items-center gap-2">
-                <PartyPopper className="h-5 w-5 text-[var(--accent)]" />
-                <div>
-                  <h2 className="text-base font-semibold">Welcome to Ideal Media 👋</h2>
-                  <p className="text-xs text-[var(--text-muted)]">
-                    A quick tour of what you can do. Tap a section to expand.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setOpen(false)}
-                className="text-[var(--text-muted)] hover:text-[var(--text)]"
-                aria-label="Close"
-              >
-                <X className="h-5 w-5" />
-              </button>
+        <div
+          className="fixed bottom-20 right-5 z-50 flex max-h-[65vh] w-80 max-w-[calc(100vw-2.5rem)] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-xl"
+          role="dialog"
+          aria-label="Quick guide"
+        >
+          <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-[var(--accent)]" />
+              <span className="text-sm font-semibold">Quick guide</span>
             </div>
-
-            <div className="flex-1 space-y-2 overflow-y-auto p-4">
-              {sections.map((s) => {
-                const expanded = openSection === s.id;
-                return (
-                  <div key={s.id} className="rounded-xl border border-[var(--border)]">
-                    <button
-                      onClick={() => setOpenSection(expanded ? "" : s.id)}
-                      className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-sm font-medium"
-                    >
-                      <span>
-                        <span className="mr-2">{s.emoji}</span>
-                        {s.title}
-                      </span>
-                      <ChevronDown
-                        className={cn(
-                          "h-4 w-4 shrink-0 text-[var(--text-muted)] transition-transform",
-                          expanded && "rotate-180"
-                        )}
-                      />
-                    </button>
-                    {expanded && (
-                      <ol className="space-y-2.5 px-4 pb-4">
-                        {s.steps.map((step, i) => (
-                          <li key={i} className="flex gap-2.5 text-sm text-[var(--text-muted)]">
-                            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--accent)]/10 text-[11px] font-semibold text-[var(--accent)]">
-                              {i + 1}
-                            </span>
-                            <span className="leading-relaxed">{renderStep(step)}</span>
-                          </li>
-                        ))}
-                      </ol>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="border-t border-[var(--border)] p-4">
-              <Button className="w-full" onClick={dismiss}>
-                Got it — let&apos;s go!
-              </Button>
-              <p className="mt-2 text-center text-xs text-[var(--text-muted)]">
-                You can reopen this anytime with the ✨ Guide button.
-              </p>
-            </div>
+            <button
+              onClick={() => setOpen(false)}
+              className="text-[var(--text-muted)] hover:text-[var(--text)]"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
+
+          <div className="flex-1 overflow-y-auto p-2">
+            {sections.map((s) => {
+              const expanded = openSection === s.id;
+              return (
+                <div key={s.id}>
+                  <button
+                    onClick={() => setOpenSection(expanded ? "" : s.id)}
+                    className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-medium hover:bg-[var(--bg)]"
+                  >
+                    <span>
+                      <span className="mr-2">{s.emoji}</span>
+                      {s.title}
+                    </span>
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 shrink-0 text-[var(--text-muted)] transition-transform",
+                        expanded && "rotate-180"
+                      )}
+                    />
+                  </button>
+                  {expanded && (
+                    <ul className="space-y-2 px-2.5 pb-3 pt-1">
+                      {s.steps.map((step, i) => (
+                        <li
+                          key={i}
+                          className="flex gap-2 text-[13px] leading-snug text-[var(--text-muted)]"
+                        >
+                          <span className="mt-px text-[var(--accent)]">•</span>
+                          <span>{renderStep(step)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <button
+            onClick={dismiss}
+            className="border-t border-[var(--border)] px-4 py-2.5 text-sm font-medium text-[var(--accent)] hover:bg-[var(--bg)]"
+          >
+            Got it
+          </button>
         </div>
       )}
     </>
