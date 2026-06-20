@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getWelfareTeam, getMissedCounts } from "@/lib/welfare-queries";
 import { PageHeader } from "@/components/app/page-header";
 import { WelfareBoard, type FollowupItem } from "./welfare-board";
+import { AddNewMemberButton } from "./add-new-member-button";
 import type { WelfareReason, WelfareStatus } from "@/lib/database.types";
 
 export default async function WelfarePage() {
@@ -29,9 +30,10 @@ export default async function WelfarePage() {
   };
   const rows = (followups ?? []) as unknown as Row[];
 
-  const [team, missed] = await Promise.all([
+  const [team, missed, { data: primarySubunits }] = await Promise.all([
     getWelfareTeam(),
     getMissedCounts(rows.filter((r) => r.reason === "missed_service").map((r) => r.user_id)),
+    supabase.from("subunits").select("id, name").eq("category", "primary").order("name"),
   ]);
 
   const items: FollowupItem[] = rows.map((r) => ({
@@ -50,7 +52,11 @@ export default async function WelfarePage() {
 
   return (
     <div>
-      <PageHeader title="Welfare" description="Members flagged for follow-up — auto-populated." />
+      <PageHeader
+        title="Welfare"
+        description="Members flagged for follow-up — auto-populated."
+        action={<AddNewMemberButton subunits={primarySubunits ?? []} />}
+      />
       <WelfareBoard items={items} team={team} />
     </div>
   );

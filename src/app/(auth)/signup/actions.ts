@@ -80,10 +80,30 @@ export async function signUpAction(input: SignupInput): Promise<SignupResult> {
 
   // ---- Claim an imported, unclaimed record ----
   if (match && !match.claimed) {
-    const { error: pwErr } = await admin.auth.admin.updateUserById(match.id, { password });
-    if (pwErr) return { ok: false, error: pwErr.message };
+    // Set their chosen password. If they typed a different email than the one on
+    // record (e.g. a welfare-added member with a placeholder email), move the
+    // login email to the typed one when it's free.
+    let signInEmail = match.email;
+    let claimErr: string | null = null;
+    if (lowerEmail && lowerEmail !== match.email) {
+      const moved = await admin.auth.admin.updateUserById(match.id, {
+        email: lowerEmail,
+        email_confirm: true,
+        password,
+      });
+      if (!moved.error) {
+        signInEmail = lowerEmail;
+      } else {
+        const keep = await admin.auth.admin.updateUserById(match.id, { password });
+        claimErr = keep.error?.message ?? null;
+      }
+    } else {
+      const r = await admin.auth.admin.updateUserById(match.id, { password });
+      claimErr = r.error?.message ?? null;
+    }
+    if (claimErr) return { ok: false, error: claimErr };
 
-    const update: Partial<Profile> = { claimed: true };
+    const update: Partial<Profile> = { claimed: true, email: signInEmail };
     if (fullName) update.full_name = fullName;
     if (input.location) update.location = input.location;
     if (input.whatsappNumber) update.whatsapp_number = input.whatsappNumber;
@@ -112,7 +132,7 @@ export async function signUpAction(input: SignupInput): Promise<SignupResult> {
     if (primarySubunit) await enrollPrimaryCourses(admin, match.id, primarySubunit);
 
     // No new_member welfare flag — they're an existing member.
-    return { ok: true, signInEmail: match.email };
+    return { ok: true, signInEmail };
   }
 
   // ---- Already a real (claimed) account ----
