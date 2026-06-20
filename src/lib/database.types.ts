@@ -49,6 +49,7 @@ export type Profile = {
   member_status: MemberStatus;
   coc_completed: boolean;
   coc_completed_at: string | null;
+  claimed: boolean;
   created_at: string;
 };
 

@@ -1,6 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Profile } from "@/lib/database.types";
 
 export interface SignupInput {
   fullName: string;
@@ -16,17 +17,38 @@ export interface SignupInput {
 export interface SignupResult {
   ok: boolean;
   error?: string;
+  /** Email the client should sign in with (may differ from typed email on a claim). */
+  signInEmail?: string;
+}
+
+type AdminClient = ReturnType<typeof createAdminClient>;
+
+/** Enroll a user into all published courses of a subunit (auto-enroll). */
+async function enrollPrimaryCourses(admin: AdminClient, userId: string, subunitId: string) {
+  const { data: courses } = await admin
+    .from("courses")
+    .select("id")
+    .eq("subunit_id", subunitId)
+    .eq("is_published", true);
+  if (courses && courses.length) {
+    await admin.from("enrollments").upsert(
+      courses.map((c) => ({ user_id: userId, course_id: c.id, status: "enrolled" as const })),
+      { onConflict: "user_id,course_id", ignoreDuplicates: true }
+    );
+  }
 }
 
 /**
- * Provisions a new member (Section 6): auth user → profile → `member` role →
- * subunit_members (one primary + any secondaries) → a `new_member` welfare
- * followup. Runs with the admin client (privileged) after validating input.
+ * Sign up (Section 6) with claim-by-phone for imported members. If a person's
+ * details match a pre-imported, unclaimed record (by email or phone), we set
+ * their chosen password on that record and attach it — no password-reset email.
+ * Otherwise we create a fresh account.
  */
 export async function signUpAction(input: SignupInput): Promise<SignupResult> {
   const { fullName, email, password, primarySubunitId } = input;
+  const lowerEmail = email.trim().toLowerCase();
 
-  if (!fullName.trim() || !email.trim() || !password) {
+  if (!fullName.trim() || !lowerEmail || !password) {
     return { ok: false, error: "Please fill in all required fields." };
   }
   if (password.length < 8) {
@@ -37,39 +59,73 @@ export async function signUpAction(input: SignupInput): Promise<SignupResult> {
   }
 
   const admin = createAdminClient();
+  const phone = (input.whatsappNumber || input.phone || "").replace(/[^\d+]/g, "");
 
-  // De-duplication guard (Section: imported members). If someone is already in
-  // the system — same email, or same phone/WhatsApp from a bulk import — don't
-  // create a second account; point them at logging in instead.
+  // Look for an existing record — first by email, then by phone.
+  let match: { id: string; email: string; claimed: boolean } | null = null;
   const { data: byEmail } = await admin
     .from("profiles")
-    .select("id")
-    .eq("email", email.toLowerCase())
-    .maybeSingle();
-  if (byEmail) {
-    return {
-      ok: false,
-      error: "You're already registered with this email. Please use Log in (or 'Forgot password' to set your password).",
-    };
-  }
-  const phoneToCheck = input.whatsappNumber || input.phone;
-  if (phoneToCheck) {
+    .select("id, email, claimed")
+    .eq("email", lowerEmail)
+    .limit(1);
+  if (byEmail && byEmail.length) match = byEmail[0];
+  if (!match && phone) {
     const { data: byPhone } = await admin
       .from("profiles")
-      .select("id")
-      .or(`whatsapp_number.eq.${phoneToCheck},phone.eq.${phoneToCheck}`)
-      .maybeSingle();
-    if (byPhone) {
-      return {
-        ok: false,
-        error: "It looks like you're already on the team (matched by phone number). Please use Log in, or 'Forgot password' if you've never set one.",
-      };
-    }
+      .select("id, email, claimed")
+      .or(`whatsapp_number.eq.${phone},phone.eq.${phone}`)
+      .limit(1);
+    if (byPhone && byPhone.length) match = byPhone[0];
   }
 
-  // Create the auth user (email pre-confirmed so they can sign in immediately).
+  // ---- Claim an imported, unclaimed record ----
+  if (match && !match.claimed) {
+    const { error: pwErr } = await admin.auth.admin.updateUserById(match.id, { password });
+    if (pwErr) return { ok: false, error: pwErr.message };
+
+    const update: Partial<Profile> = { claimed: true };
+    if (fullName) update.full_name = fullName;
+    if (input.location) update.location = input.location;
+    if (input.whatsappNumber) update.whatsapp_number = input.whatsappNumber;
+    if (input.phone) update.phone = input.phone;
+    await admin.from("profiles").update(update).eq("id", match.id);
+
+    await admin
+      .from("user_roles")
+      .upsert({ user_id: match.id, role: "member" }, { onConflict: "user_id,role", ignoreDuplicates: true });
+
+    // Make sure they have a primary subunit (use the imported one, else chosen).
+    const { data: prim } = await admin
+      .from("subunit_members")
+      .select("subunit_id")
+      .eq("user_id", match.id)
+      .eq("membership_type", "primary")
+      .maybeSingle();
+    let primarySubunit = prim?.subunit_id;
+    if (!primarySubunit) {
+      await admin.from("subunit_members").upsert(
+        { user_id: match.id, subunit_id: primarySubunitId, membership_type: "primary" },
+        { onConflict: "subunit_id,user_id", ignoreDuplicates: true }
+      );
+      primarySubunit = primarySubunitId;
+    }
+    if (primarySubunit) await enrollPrimaryCourses(admin, match.id, primarySubunit);
+
+    // No new_member welfare flag — they're an existing member.
+    return { ok: true, signInEmail: match.email };
+  }
+
+  // ---- Already a real (claimed) account ----
+  if (match && match.claimed) {
+    return {
+      ok: false,
+      error: "You're already registered. Please use Log in instead.",
+    };
+  }
+
+  // ---- Brand-new member ----
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
-    email,
+    email: lowerEmail,
     password,
     email_confirm: true,
     user_metadata: { full_name: fullName },
@@ -77,7 +133,6 @@ export async function signUpAction(input: SignupInput): Promise<SignupResult> {
   if (createErr || !created.user) {
     return { ok: false, error: createErr?.message ?? "Could not create account." };
   }
-
   const userId = created.user.id;
 
   const cleanup = async (message: string): Promise<SignupResult> => {
@@ -88,7 +143,7 @@ export async function signUpAction(input: SignupInput): Promise<SignupResult> {
   const { error: profileErr } = await admin.from("profiles").insert({
     id: userId,
     full_name: fullName,
-    email,
+    email: lowerEmail,
     phone: input.phone || null,
     location: input.location || null,
     whatsapp_number: input.whatsappNumber || null,
@@ -104,37 +159,17 @@ export async function signUpAction(input: SignupInput): Promise<SignupResult> {
     { subunit_id: primarySubunitId, user_id: userId, membership_type: "primary" as const },
     ...input.secondarySubunitIds
       .filter((id) => id && id !== primarySubunitId)
-      .map((id) => ({
-        subunit_id: id,
-        user_id: userId,
-        membership_type: "secondary" as const,
-      })),
+      .map((id) => ({ subunit_id: id, user_id: userId, membership_type: "secondary" as const })),
   ];
   const { error: memberErr } = await admin.from("subunit_members").insert(memberships);
   if (memberErr) return cleanup(memberErr.message);
 
-  // Auto-enroll into any already-published courses in the primary subunit
-  // (Section 5: primary-subunit courses are auto-enrolled).
-  const { data: primaryCourses } = await admin
-    .from("courses")
-    .select("id")
-    .eq("subunit_id", primarySubunitId)
-    .eq("is_published", true);
-  if (primaryCourses && primaryCourses.length) {
-    await admin.from("enrollments").upsert(
-      primaryCourses.map((c) => ({
-        user_id: userId,
-        course_id: c.id,
-        status: "enrolled" as const,
-      })),
-      { onConflict: "user_id,course_id", ignoreDuplicates: true }
-    );
-  }
+  await enrollPrimaryCourses(admin, userId, primarySubunitId);
 
   // Welfare sees every new member (Section 6 / 10).
   await admin
     .from("welfare_followups")
     .insert({ user_id: userId, reason: "new_member", auto_flagged: true });
 
-  return { ok: true };
+  return { ok: true, signInEmail: lowerEmail };
 }

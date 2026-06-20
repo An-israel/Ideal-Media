@@ -110,6 +110,9 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
       phone: phone || null,
       whatsapp_number: whatsapp || null,
       member_status: "active",
+      // Unclaimed: no usable password yet. The person claims it by signing up
+      // with a matching phone/email and choosing their own password.
+      claimed: false,
     });
     await admin.from("user_roles").insert({ user_id: userId, role: "member" });
 

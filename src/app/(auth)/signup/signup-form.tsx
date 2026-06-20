@@ -83,7 +83,7 @@ export function SignupForm({
     // Sign in with the new credentials, then head to the COC gate.
     const supabase = createClient();
     const { error: signInErr } = await supabase.auth.signInWithPassword({
-      email: form.email,
+      email: result.signInEmail ?? form.email,
       password: form.password,
     });
     setLoading(false);
