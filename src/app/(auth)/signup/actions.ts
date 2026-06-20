@@ -38,6 +38,35 @@ export async function signUpAction(input: SignupInput): Promise<SignupResult> {
 
   const admin = createAdminClient();
 
+  // De-duplication guard (Section: imported members). If someone is already in
+  // the system — same email, or same phone/WhatsApp from a bulk import — don't
+  // create a second account; point them at logging in instead.
+  const { data: byEmail } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("email", email.toLowerCase())
+    .maybeSingle();
+  if (byEmail) {
+    return {
+      ok: false,
+      error: "You're already registered with this email. Please use Log in (or 'Forgot password' to set your password).",
+    };
+  }
+  const phoneToCheck = input.whatsappNumber || input.phone;
+  if (phoneToCheck) {
+    const { data: byPhone } = await admin
+      .from("profiles")
+      .select("id")
+      .or(`whatsapp_number.eq.${phoneToCheck},phone.eq.${phoneToCheck}`)
+      .maybeSingle();
+    if (byPhone) {
+      return {
+        ok: false,
+        error: "It looks like you're already on the team (matched by phone number). Please use Log in, or 'Forgot password' if you've never set one.",
+      };
+    }
+  }
+
   // Create the auth user (email pre-confirmed so they can sign in immediately).
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
     email,

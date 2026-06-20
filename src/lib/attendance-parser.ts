@@ -10,12 +10,20 @@ export interface RosterMember {
   primary_subunit: string | null;
 }
 
-/** Reads an uploaded .xlsx/.csv buffer into JSON rows, stripping empty rows. */
-export function readSheetRows(buffer: Buffer): Record<string, unknown>[] {
-  const wb = XLSX.read(buffer, { type: "buffer" });
+/** Reads an uploaded .xlsx/.csv buffer into JSON rows, stripping empty rows.
+ * Pass `{ raw: false }` to get cells as their displayed strings (handy for
+ * dates), or the default `raw: true` to keep native numbers. */
+export function readSheetRows(
+  buffer: Buffer,
+  opts?: { raw?: boolean }
+): Record<string, unknown>[] {
+  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
   if (!ws) return [];
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
+  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, {
+    defval: "",
+    raw: opts?.raw ?? true,
+  });
   return rows.filter((r) =>
     Object.values(r).some((v) => String(v ?? "").trim() !== "")
   );
