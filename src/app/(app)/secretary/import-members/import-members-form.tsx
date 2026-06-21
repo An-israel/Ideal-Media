@@ -6,14 +6,16 @@ import { Upload, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { SheetSource } from "@/components/app/sheet-source";
 import { toast } from "@/components/ui/toaster";
 import { importMembers, type ImportResult } from "./actions";
 
-export function ImportMembersForm() {
+export function ImportMembersForm({ subunits }: { subunits: { id: string; name: string }[] }) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [sheetUrl, setSheetUrl] = useState("");
+  const [defaultSubunitId, setDefaultSubunitId] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
 
@@ -26,6 +28,7 @@ export function ImportMembersForm() {
       const fd = new FormData();
       if (sheetUrl.trim()) fd.set("sheetUrl", sheetUrl.trim());
       else if (file) fd.set("file", file);
+      if (defaultSubunitId) fd.set("defaultSubunitId", defaultSubunitId);
       const res = await importMembers(fd);
       setResult(res);
       router.refresh();
@@ -43,6 +46,20 @@ export function ImportMembersForm() {
           <div className="space-y-2">
             <Label>Member spreadsheet</Label>
             <SheetSource file={file} setFile={setFile} sheetUrl={sheetUrl} setSheetUrl={setSheetUrl} />
+          </div>
+          <div className="space-y-2">
+            <Label>Default subunit</Label>
+            <Select value={defaultSubunitId} onChange={(e) => setDefaultSubunitId(e.target.value)}>
+              <option value="">— use the sheet&apos;s subunit column —</option>
+              {subunits.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+            <p className="text-xs text-[var(--text-muted)]">
+              Used for rows with no subunit in the sheet (e.g. a single unit&apos;s list).
+            </p>
           </div>
           <Button type="submit" disabled={loading || (!file && !sheetUrl.trim())}>
             <Upload className="h-4 w-4" />

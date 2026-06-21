@@ -63,6 +63,7 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
 
     const file = formData.get("file") as File | null;
     const sheetUrl = String(formData.get("sheetUrl") ?? "").trim();
+    const defaultSubunitId = String(formData.get("defaultSubunitId") ?? "").trim();
 
     let buffer: Buffer;
     if (sheetUrl) {
@@ -110,24 +111,49 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
       const secondaryRaw = pick(lookup, colMap?.secondary_subunits, ["secondary subunits", "secondary", "other subunits"]);
 
       const rowNum = i + 2;
-      if (!fullName || !email) {
-        result.skipped.push({ row: rowNum, name: fullName || "(no name)", reason: "missing name or email" });
+      if (!fullName) {
+        result.skipped.push({ row: rowNum, name: "(no name)", reason: "no name found in the row" });
         continue;
       }
-      const primaryId = matchSubunit(subunits, primaryName);
+      // Subunit: match from the row, else fall back to the chosen default.
+      const primaryId = matchSubunit(subunits, primaryName) || defaultSubunitId || undefined;
       if (!primaryId) {
-        result.skipped.push({ row: rowNum, name: fullName, reason: `unknown subunit "${primaryName}"` });
+        result.skipped.push({
+          row: rowNum,
+          name: fullName,
+          reason: primaryName
+            ? `unknown subunit "${primaryName}" (or set a default subunit)`
+            : "no subunit — set a default subunit above",
+        });
         continue;
       }
 
-      const { data: existing } = await admin.from("profiles").select("id").eq("email", email).maybeSingle();
-      if (existing) {
-        result.skipped.push({ row: rowNum, name: fullName, reason: "already exists" });
-        continue;
+      // Skip if already in the system (by email if present, else by phone).
+      if (email) {
+        const { data: existing } = await admin.from("profiles").select("id").eq("email", email).maybeSingle();
+        if (existing) {
+          result.skipped.push({ row: rowNum, name: fullName, reason: "already exists" });
+          continue;
+        }
       }
+      const phoneKey = (whatsapp || phone).replace(/[^\d+]/g, "");
+      if (phoneKey) {
+        const { data: existingPhone } = await admin
+          .from("profiles")
+          .select("id")
+          .or(`whatsapp_number.eq.${phoneKey},phone.eq.${phoneKey}`)
+          .limit(1);
+        if (existingPhone && existingPhone.length) {
+          result.skipped.push({ row: rowNum, name: fullName, reason: "already exists (phone match)" });
+          continue;
+        }
+      }
+
+      // Email is optional — generate a placeholder they replace at signup.
+      const accountEmail = email || `nm-${randomUUID()}@no-email.ideal-media.app`;
 
       const { data: created, error: createErr } = await admin.auth.admin.createUser({
-        email,
+        email: accountEmail,
         password: randomUUID(),
         email_confirm: true,
         user_metadata: { full_name: fullName },
@@ -141,7 +167,7 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
       const { error: profErr } = await admin.from("profiles").insert({
         id: userId,
         full_name: fullName,
-        email,
+        email: accountEmail,
         phone: phone || null,
         whatsapp_number: whatsapp || null,
         member_status: "active",
