@@ -20,16 +20,20 @@ export default async function ImportAttendancePage() {
             <CardTitle className="text-base">How to prepare your file</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-[var(--text-muted)]">
-            <p>Pick the activity above, then upload a .xlsx/.csv with a header row and one row per record:</p>
+            <p>
+              Pick the activity above, then give a sheet with <b>one row per record</b>.
+              Column names don&apos;t matter — the AI works out which column is the
+              person, the date, and the status, and ignores the rest.
+            </p>
+            <p>Just make sure each row has, somewhere:</p>
             <ul className="space-y-1">
-              <li>• <b>Email</b> (or <b>Name</b>) — who the record is for</li>
-              <li>• <b>Date</b> — best as 2025-01-05 (or a real Excel date)</li>
-              <li>• <b>Status</b> — present / absent / traveled / excused</li>
+              <li>• an <b>email</b> or <b>name</b> — who the record is for</li>
+              <li>• a <b>date</b> — best as 2025-01-05 (or a real Excel date)</li>
+              <li>• a <b>status</b> — present / absent / traveled / excused</li>
             </ul>
             <p>
-              Members are matched by email first, then by name. Import your members
-              first if they are not in the system yet. Rows that do not match are
-              listed so you can fix them.
+              Members are matched by email first, then by name — so import your members
+              first. Rows that don&apos;t match are listed so you can fix them.
             </p>
           </CardContent>
         </Card>

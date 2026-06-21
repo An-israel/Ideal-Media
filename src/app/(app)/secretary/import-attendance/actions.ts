@@ -5,6 +5,7 @@ import { getSessionRoles } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readSheetRows, normalizeStatus } from "@/lib/attendance-parser";
 import { fetchSheetAsBuffer } from "@/lib/google-sheets";
+import { mapAttendanceColumns, type AttendanceColumnMap } from "@/lib/import-mapper";
 import { recomputeMissedService } from "@/lib/welfare-automation";
 import { ACCEPTED_UPLOAD_EXT, MAX_UPLOAD_BYTES } from "@/lib/constants";
 import type { AttendanceStatus } from "@/lib/database.types";
@@ -23,6 +24,15 @@ function field(lookup: Record<string, unknown>, names: string[]): unknown {
     if (v != null && String(v).trim() !== "") return v;
   }
   return "";
+}
+
+/** Prefer the AI-mapped column, fall back to header guesses. */
+function pick(lookup: Record<string, unknown>, mappedHeader: string | undefined, heuristics: string[]): unknown {
+  if (mappedHeader) {
+    const v = lookup[mappedHeader.trim().toLowerCase()];
+    if (v != null && String(v).trim() !== "") return v;
+  }
+  return field(lookup, heuristics);
 }
 
 /** Coerces a cell to a YYYY-MM-DD date string, or null if it can't. */
@@ -79,6 +89,15 @@ export async function importPastAttendance(formData: FormData): Promise<Attendan
     byName.set(p.full_name.toLowerCase(), p.id);
   }
 
+  // Let AI map the columns (the sheet's headers may be messy/unexpected).
+  const headers = rows.length ? Object.keys(rows[0]) : [];
+  let colMap: AttendanceColumnMap | null = null;
+  try {
+    colMap = await mapAttendanceColumns(headers, rows.slice(0, 5));
+  } catch {
+    colMap = null;
+  }
+
   const result: AttendanceImportResult = { imported: 0, skipped: [] };
   const records: {
     user_id: string;
@@ -93,21 +112,21 @@ export async function importPastAttendance(formData: FormData): Promise<Attendan
     for (const [k, v] of Object.entries(rows[i])) lookup[k.trim().toLowerCase()] = v;
     const rowNum = i + 2;
 
-    const email = String(field(lookup, ["email", "email address"])).toLowerCase().trim();
-    const memberName = String(field(lookup, ["name", "full name", "member"])).trim();
+    const email = String(pick(lookup, colMap?.email, ["email", "email address"])).toLowerCase().trim();
+    const memberName = String(pick(lookup, colMap?.name, ["name", "full name", "member"])).trim();
     const userId = (email && byEmail.get(email)) || (memberName && byName.get(memberName.toLowerCase()));
     if (!userId) {
       result.skipped.push({ row: rowNum, reason: `no member match (${email || memberName || "blank"})` });
       continue;
     }
 
-    const date = coerceDate(field(lookup, ["date", "service date", "day"]));
+    const date = coerceDate(pick(lookup, colMap?.date, ["date", "service date", "day"]));
     if (!date) {
       result.skipped.push({ row: rowNum, reason: "unreadable date" });
       continue;
     }
 
-    const status = normalizeStatus(String(field(lookup, ["status", "attendance", "present"])));
+    const status = normalizeStatus(String(pick(lookup, colMap?.status, ["status", "attendance", "present"])));
     records.push({ user_id: userId, activity_id: activityId, service_date: date, status, source: "manual" });
   }
 

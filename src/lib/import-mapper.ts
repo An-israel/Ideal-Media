@@ -70,3 +70,61 @@ export async function mapMemberColumns(
     secondary_subunits: String(m.secondary_subunits ?? ""),
   };
 }
+
+export interface AttendanceColumnMap {
+  email: string;
+  name: string;
+  date: string;
+  status: string;
+}
+
+const ATTENDANCE_MAP_TOOL: Anthropic.Tool = {
+  name: "map_attendance_columns",
+  description:
+    "Map each target attendance field to the spreadsheet column header that best matches it.",
+  input_schema: {
+    type: "object",
+    properties: {
+      email: { type: "string", description: "Header for the member's email (empty string if none)." },
+      name: { type: "string", description: "Header for the member's name (empty string if none)." },
+      date: { type: "string", description: "Header for the service date (empty string if none)." },
+      status: { type: "string", description: "Header for present/absent status (empty string if none)." },
+    },
+    required: ["email", "name", "date", "status"],
+  },
+};
+
+/** Same idea as mapMemberColumns, for a past-attendance sheet (one row per record). */
+export async function mapAttendanceColumns(
+  headers: string[],
+  sampleRows: Record<string, unknown>[]
+): Promise<AttendanceColumnMap> {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+
+  const prompt =
+    "A spreadsheet of past attendance (one row per person per service) has these headers:\n" +
+    JSON.stringify(headers) +
+    "\n\nA few sample rows:\n" +
+    JSON.stringify(sampleRows.slice(0, 5), null, 2) +
+    "\n\nMap each target field to the EXACT header text that best matches it (copy it " +
+    "exactly). If no column fits, use an empty string. Ignore every other column. " +
+    "Report via the tool.";
+
+  const res = await client.messages.create({
+    model: ATTENDANCE_PARSE_MODEL,
+    max_tokens: 1024,
+    tools: [ATTENDANCE_MAP_TOOL],
+    tool_choice: { type: "tool", name: ATTENDANCE_MAP_TOOL.name },
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const block = res.content.find((b) => b.type === "tool_use");
+  if (!block || block.type !== "tool_use") throw new Error("No column mapping returned.");
+  const m = block.input as Partial<AttendanceColumnMap>;
+  return {
+    email: String(m.email ?? ""),
+    name: String(m.name ?? ""),
+    date: String(m.date ?? ""),
+    status: String(m.status ?? ""),
+  };
+}
