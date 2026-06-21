@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { Upload, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { SheetSource } from "@/components/app/sheet-source";
 import { toast } from "@/components/ui/toaster";
 import { importPastAttendance, type AttendanceImportResult } from "./actions";
 
@@ -15,17 +15,19 @@ export function ImportAttendanceForm({ activities }: { activities: { id: string;
   const router = useRouter();
   const [activityId, setActivityId] = useState(activities[0]?.id ?? "");
   const [file, setFile] = useState<File | null>(null);
+  const [sheetUrl, setSheetUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AttendanceImportResult | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file || !activityId) return;
+    if ((!file && !sheetUrl.trim()) || !activityId) return;
     setLoading(true);
     setResult(null);
     try {
       const fd = new FormData();
-      fd.set("file", file);
+      if (sheetUrl.trim()) fd.set("sheetUrl", sheetUrl.trim());
+      else if (file) fd.set("file", file);
       fd.set("activityId", activityId);
       const res = await importPastAttendance(fd);
       setResult(res);
@@ -52,16 +54,10 @@ export function ImportAttendanceForm({ activities }: { activities: { id: string;
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="file">Attendance spreadsheet (.xlsx or .csv)</Label>
-            <Input
-              id="file"
-              type="file"
-              accept=".xlsx,.csv"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              required
-            />
+            <Label>Attendance spreadsheet</Label>
+            <SheetSource file={file} setFile={setFile} sheetUrl={sheetUrl} setSheetUrl={setSheetUrl} />
           </div>
-          <Button type="submit" disabled={loading || !file}>
+          <Button type="submit" disabled={loading || (!file && !sheetUrl.trim())}>
             <Upload className="h-4 w-4" />
             {loading ? "Importing…" : "Import attendance"}
           </Button>

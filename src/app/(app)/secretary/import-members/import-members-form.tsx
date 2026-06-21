@@ -5,25 +5,27 @@ import { useRouter } from "next/navigation";
 import { Upload, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SheetSource } from "@/components/app/sheet-source";
 import { toast } from "@/components/ui/toaster";
 import { importMembers, type ImportResult } from "./actions";
 
 export function ImportMembersForm() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
+  const [sheetUrl, setSheetUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file) return;
+    if (!file && !sheetUrl.trim()) return;
     setLoading(true);
     setResult(null);
     try {
       const fd = new FormData();
-      fd.set("file", file);
+      if (sheetUrl.trim()) fd.set("sheetUrl", sheetUrl.trim());
+      else if (file) fd.set("file", file);
       const res = await importMembers(fd);
       setResult(res);
       router.refresh();
@@ -39,16 +41,10 @@ export function ImportMembersForm() {
       <CardContent className="space-y-4 pt-6">
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="file">Member spreadsheet (.xlsx or .csv)</Label>
-            <Input
-              id="file"
-              type="file"
-              accept=".xlsx,.csv"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              required
-            />
+            <Label>Member spreadsheet</Label>
+            <SheetSource file={file} setFile={setFile} sheetUrl={sheetUrl} setSheetUrl={setSheetUrl} />
           </div>
-          <Button type="submit" disabled={loading || !file}>
+          <Button type="submit" disabled={loading || (!file && !sheetUrl.trim())}>
             <Upload className="h-4 w-4" />
             {loading ? "Importing…" : "Import members"}
           </Button>

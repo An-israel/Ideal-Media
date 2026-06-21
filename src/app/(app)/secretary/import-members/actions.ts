@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getSessionRoles } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readSheetRows } from "@/lib/attendance-parser";
+import { fetchSheetAsBuffer } from "@/lib/google-sheets";
 import { ACCEPTED_UPLOAD_EXT, MAX_UPLOAD_BYTES } from "@/lib/constants";
 
 async function requireSecretary() {
@@ -39,15 +40,24 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
   await requireSecretary();
 
   const file = formData.get("file") as File | null;
-  if (!file) throw new Error("No file provided.");
-  const name = file.name.toLowerCase();
-  if (!ACCEPTED_UPLOAD_EXT.some((ext) => name.endsWith(ext))) {
-    throw new Error("Please upload a .xlsx or .csv file.");
+  const sheetUrl = String(formData.get("sheetUrl") ?? "").trim();
+
+  let buffer: Buffer;
+  if (sheetUrl) {
+    buffer = await fetchSheetAsBuffer(sheetUrl);
+  } else if (file) {
+    const name = file.name.toLowerCase();
+    if (!ACCEPTED_UPLOAD_EXT.some((ext) => name.endsWith(ext))) {
+      throw new Error("Please upload a .xlsx or .csv file.");
+    }
+    if (file.size > MAX_UPLOAD_BYTES) throw new Error("File exceeds the 5MB limit.");
+    buffer = Buffer.from(await file.arrayBuffer());
+  } else {
+    throw new Error("Upload a file or paste a Google Sheet link.");
   }
-  if (file.size > MAX_UPLOAD_BYTES) throw new Error("File exceeds the 5MB limit.");
 
   const admin = createAdminClient();
-  const rows = readSheetRows(Buffer.from(await file.arrayBuffer()));
+  const rows = readSheetRows(buffer);
 
   const { data: subunits } = await admin.from("subunits").select("id, name, slug");
   const subunitByName = new Map<string, string>();
