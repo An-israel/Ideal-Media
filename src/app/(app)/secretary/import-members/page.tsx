@@ -16,19 +16,21 @@ export default function ImportMembersPage() {
             <CardTitle className="text-base">How to prepare your file</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-[var(--text-muted)]">
-            <p>Use a .xlsx or .csv with a header row. These columns are read (others are ignored):</p>
+            <p>
+              Your columns don&apos;t need special names or tidying — the AI reads your
+              sheet and figures out which column is the <b>name</b>, <b>email</b>,
+              <b> phone</b>, <b>WhatsApp</b>, and <b>subunit</b>, and ignores the rest.
+            </p>
+            <p>Just make sure the sheet contains, somewhere:</p>
             <ul className="space-y-1">
-              <li>• <b>Full Name</b> — required</li>
-              <li>• <b>Email</b> — required (their login)</li>
-              <li>• <b>Phone</b> — optional</li>
-              <li>• <b>WhatsApp</b> — recommended for leaders</li>
-              <li>• <b>Primary Subunit</b> — required, must match a subunit name</li>
-              <li>• <b>Secondary Subunits</b> — optional, comma-separated</li>
+              <li>• each person&apos;s <b>name</b> and <b>email</b> (required)</li>
+              <li>• a <b>phone / WhatsApp</b> number (recommended — used to link them at signup)</li>
+              <li>• their <b>subunit / unit</b> (matched loosely, e.g. “Photo” → Photography)</li>
             </ul>
             <p>
-              Everyone is created as an active member. They set their own password later
-              with <b>“Forgot password”</b> on the login page, using their email. Rows
-              that are missing info or already exist are skipped and listed for you.
+              Everyone is created as an active member; they pick their own password when
+              they sign up. Rows missing a name/email, with an unrecognized subunit, or
+              already in the system are skipped and listed for you.
             </p>
           </CardContent>
         </Card>

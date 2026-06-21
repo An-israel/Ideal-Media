@@ -6,6 +6,7 @@ import { getSessionRoles } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readSheetRows } from "@/lib/attendance-parser";
 import { fetchSheetAsBuffer } from "@/lib/google-sheets";
+import { mapMemberColumns, type MemberColumnMap } from "@/lib/import-mapper";
 import { ACCEPTED_UPLOAD_EXT, MAX_UPLOAD_BYTES } from "@/lib/constants";
 
 async function requireSecretary() {
@@ -23,6 +24,27 @@ function field(lookup: Record<string, string>, names: string[]): string {
     if (v != null && String(v).trim() !== "") return String(v).trim();
   }
   return "";
+}
+
+/** Prefer the AI-mapped column for a field; fall back to header guesses. */
+function pick(lookup: Record<string, string>, mappedHeader: string | undefined, heuristics: string[]): string {
+  if (mappedHeader) {
+    const v = lookup[mappedHeader.trim().toLowerCase()];
+    if (v != null && String(v).trim() !== "") return String(v).trim();
+  }
+  return field(lookup, heuristics);
+}
+
+/** Tolerant subunit match: exact name/slug, then partial contains either way. */
+function matchSubunit(subunits: { id: string; name: string; slug: string }[], value: string): string | undefined {
+  const v = value.trim().toLowerCase();
+  if (!v) return undefined;
+  for (const s of subunits) if (s.name.toLowerCase() === v || s.slug.toLowerCase() === v) return s.id;
+  for (const s of subunits) {
+    const n = s.name.toLowerCase();
+    if (v.includes(n) || n.includes(v)) return s.id;
+  }
+  return undefined;
 }
 
 export interface ImportResult {
@@ -59,11 +81,17 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
   const admin = createAdminClient();
   const rows = readSheetRows(buffer);
 
-  const { data: subunits } = await admin.from("subunits").select("id, name, slug");
-  const subunitByName = new Map<string, string>();
-  for (const s of subunits ?? []) {
-    subunitByName.set(s.name.toLowerCase(), s.id);
-    subunitByName.set(s.slug.toLowerCase(), s.id);
+  const { data: subunitsData } = await admin.from("subunits").select("id, name, slug");
+  const subunits = subunitsData ?? [];
+
+  // Let AI figure out which columns are which (the sheet's headers may be messy
+  // or unexpected). Falls back to header guesses if the AI call fails.
+  const headers = rows.length ? Object.keys(rows[0]) : [];
+  let colMap: MemberColumnMap | null = null;
+  try {
+    colMap = await mapMemberColumns(headers, rows.slice(0, 5));
+  } catch {
+    colMap = null;
   }
 
   const result: ImportResult = { created: 0, skipped: [] };
@@ -72,19 +100,19 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
     const lookup: Record<string, string> = {};
     for (const [k, v] of Object.entries(rows[i])) lookup[k.trim().toLowerCase()] = String(v ?? "");
 
-    const fullName = field(lookup, ["full name", "name", "fullname", "member"]);
-    const email = field(lookup, ["email", "email address"]).toLowerCase();
-    const phone = field(lookup, ["phone", "phone number"]);
-    const whatsapp = field(lookup, ["whatsapp", "whatsapp number", "wa"]);
-    const primaryName = field(lookup, ["primary subunit", "subunit", "primary unit", "unit"]);
-    const secondaryRaw = field(lookup, ["secondary subunits", "secondary", "other subunits"]);
+    const fullName = pick(lookup, colMap?.full_name, ["full name", "name", "fullname", "member"]);
+    const email = pick(lookup, colMap?.email, ["email", "email address"]).toLowerCase();
+    const phone = pick(lookup, colMap?.phone, ["phone", "phone number"]);
+    const whatsapp = pick(lookup, colMap?.whatsapp, ["whatsapp", "whatsapp number", "wa"]);
+    const primaryName = pick(lookup, colMap?.primary_subunit, ["primary subunit", "subunit", "primary unit", "unit"]);
+    const secondaryRaw = pick(lookup, colMap?.secondary_subunits, ["secondary subunits", "secondary", "other subunits"]);
 
     const rowNum = i + 2; // +1 for header, +1 for 1-based
     if (!fullName || !email) {
       result.skipped.push({ row: rowNum, name: fullName || "(no name)", reason: "missing name or email" });
       continue;
     }
-    const primaryId = subunitByName.get(primaryName.toLowerCase());
+    const primaryId = matchSubunit(subunits, primaryName);
     if (!primaryId) {
       result.skipped.push({ row: rowNum, name: fullName, reason: `unknown subunit "${primaryName}"` });
       continue;
@@ -132,8 +160,8 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
       membership_type: "primary" | "secondary";
     }[] = [{ user_id: userId, subunit_id: primaryId, membership_type: "primary" }];
     if (secondaryRaw) {
-      for (const sName of secondaryRaw.split(/[,;]/).map((s) => s.trim()).filter(Boolean)) {
-        const sid = subunitByName.get(sName.toLowerCase());
+      for (const sName of secondaryRaw.split(/[,;/]/).map((s) => s.trim()).filter(Boolean)) {
+        const sid = matchSubunit(subunits, sName);
         if (sid && sid !== primaryId) {
           memberships.push({ user_id: userId, subunit_id: sid, membership_type: "secondary" });
         }
