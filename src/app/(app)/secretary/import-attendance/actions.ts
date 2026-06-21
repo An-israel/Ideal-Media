@@ -10,12 +10,9 @@ import { recomputeMissedService } from "@/lib/welfare-automation";
 import { ACCEPTED_UPLOAD_EXT, MAX_UPLOAD_BYTES } from "@/lib/constants";
 import type { AttendanceStatus } from "@/lib/database.types";
 
-async function requireSecretary() {
+async function isSecretary() {
   const session = await getSessionRoles();
-  if (!session) throw new Error("Not authenticated");
-  if (!session.roles.includes("secretary") && !session.roles.includes("super_admin")) {
-    throw new Error("Secretary access required");
-  }
+  return !!session && (session.roles.includes("secretary") || session.roles.includes("super_admin"));
 }
 
 function field(lookup: Record<string, unknown>, names: string[]): unknown {
@@ -49,20 +46,25 @@ function coerceDate(value: unknown): string | null {
 export interface AttendanceImportResult {
   imported: number;
   skipped: { row: number; reason: string }[];
+  /** Set when the whole import failed — friendly message. */
+  error?: string;
 }
 
 /**
- * Imports historical attendance from a spreadsheet (one row per record).
- * Expected columns (case-insensitive): Email (or Name) | Date | Status.
- * The activity is chosen in the UI and applies to every row.
+ * Imports historical attendance from a spreadsheet (file or Google Sheet link).
+ * Columns can be messy — AI maps them. The activity is chosen in the UI and
+ * applies to every row. Returns a result (never throws) so the UI shows a clear
+ * reason instead of a masked server error.
  */
 export async function importPastAttendance(formData: FormData): Promise<AttendanceImportResult> {
-  await requireSecretary();
+  const empty: AttendanceImportResult = { imported: 0, skipped: [] };
+  try {
+  if (!(await isSecretary())) return { ...empty, error: "Secretary access required." };
 
   const file = formData.get("file") as File | null;
   const sheetUrl = String(formData.get("sheetUrl") ?? "").trim();
   const activityId = String(formData.get("activityId") ?? "");
-  if (!activityId) throw new Error("Pick an activity.");
+  if (!activityId) return { ...empty, error: "Pick an activity." };
 
   let buffer: Buffer;
   if (sheetUrl) {
@@ -70,16 +72,17 @@ export async function importPastAttendance(formData: FormData): Promise<Attendan
   } else if (file) {
     const name = file.name.toLowerCase();
     if (!ACCEPTED_UPLOAD_EXT.some((ext) => name.endsWith(ext))) {
-      throw new Error("Please upload a .xlsx or .csv file.");
+      return { ...empty, error: "Please upload a .xlsx or .csv file." };
     }
-    if (file.size > MAX_UPLOAD_BYTES) throw new Error("File exceeds the 5MB limit.");
+    if (file.size > MAX_UPLOAD_BYTES) return { ...empty, error: "File exceeds the 5MB limit." };
     buffer = Buffer.from(await file.arrayBuffer());
   } else {
-    throw new Error("Upload a file or paste a Google Sheet link.");
+    return { ...empty, error: "Upload a file or paste a Google Sheet link." };
   }
 
   const admin = createAdminClient();
   const rows = readSheetRows(buffer);
+  if (rows.length === 0) return { ...empty, error: "That sheet looks empty — check the link/file." };
 
   const { data: profiles } = await admin.from("profiles").select("id, email, full_name");
   const byEmail = new Map<string, string>();
@@ -134,7 +137,7 @@ export async function importPastAttendance(formData: FormData): Promise<Attendan
     const { error } = await admin
       .from("attendance_records")
       .upsert(records, { onConflict: "user_id,activity_id,service_date" });
-    if (error) throw new Error(error.message);
+    if (error) return { ...result, error: error.message };
     result.imported = records.length;
 
     // Refresh welfare flags if this is the attendance-signal activity.
@@ -149,4 +152,7 @@ export async function importPastAttendance(formData: FormData): Promise<Attendan
   revalidatePath("/secretary/attendance");
   revalidatePath("/welfare");
   return result;
+  } catch (e) {
+    return { ...empty, error: e instanceof Error ? e.message : String(e) };
+  }
 }
