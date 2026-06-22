@@ -104,13 +104,20 @@ export function SecretaryWorkspace({
         />
       </div>
 
+      {dates.length === 0 && members.length > 0 && (
+        <p className="text-sm text-[var(--text-muted)]">
+          Showing your <b>{members.length}</b> members. No attendance recorded for this
+          register yet — use <b>Upload attendance</b> or <b>Import past attendance</b> and
+          date columns will fill in here.
+        </p>
+      )}
+
       {/* Spreadsheet */}
       <Card>
         <CardContent className="overflow-x-auto p-0">
-          {dates.length === 0 ? (
+          {members.length === 0 ? (
             <p className="px-5 py-12 text-center text-sm text-[var(--text-muted)]">
-              No attendance recorded for this register yet. Use <b>Upload attendance</b> or{" "}
-              <b>Import past attendance</b> above and it will appear here.
+              No members yet. Use <b>Import members</b> above to add your team.
             </p>
           ) : (
             <table className="w-full border-collapse text-sm">
