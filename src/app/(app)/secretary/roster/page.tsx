@@ -9,13 +9,19 @@ export default async function RosterPage() {
 
   const { data: members } = await supabase
     .from("subunit_members")
-    .select("user_id, profiles(full_name, member_status, location), subunits(name)")
+    .select("user_id, profiles(full_name, member_status, location, member_origin, claimed), subunits(name)")
     .eq("membership_type", "primary")
     .order("user_id");
 
   type Row = {
     user_id: string;
-    profiles: { full_name: string; member_status: MemberStatus; location: string | null } | null;
+    profiles: {
+      full_name: string;
+      member_status: MemberStatus;
+      location: string | null;
+      member_origin: string;
+      claimed: boolean;
+    } | null;
     subunits: { name: string } | null;
   };
   const rows: RosterRow[] = ((members ?? []) as unknown as Row[])
@@ -26,6 +32,8 @@ export default async function RosterPage() {
       status: r.profiles!.member_status,
       location: r.profiles!.location,
       subunit: r.subunits?.name ?? "—",
+      origin: r.profiles!.member_origin,
+      claimed: r.profiles!.claimed,
     }));
 
   // "Recently missed service": absentees on the latest signal-activity session.

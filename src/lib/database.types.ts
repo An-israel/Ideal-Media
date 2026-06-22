@@ -50,6 +50,8 @@ export type Profile = {
   coc_completed: boolean;
   coc_completed_at: string | null;
   claimed: boolean;
+  /** How they joined: self_signup | import | welfare */
+  member_origin: string;
   created_at: string;
 };
 

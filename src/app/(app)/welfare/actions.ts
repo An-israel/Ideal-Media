@@ -115,6 +115,7 @@ export async function addNewMember(input: NewMemberInput) {
     whatsapp_number: input.whatsappNumber || null,
     member_status: "active",
     claimed: false,
+    member_origin: "welfare",
   });
   await admin.from("user_roles").insert({ user_id: userId, role: "member" });
   await admin.from("subunit_members").insert({

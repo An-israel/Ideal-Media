@@ -18,6 +18,14 @@ export type RosterRow = {
   status: MemberStatus;
   location: string | null;
   subunit: string;
+  origin: string;
+  claimed: boolean;
+};
+
+const ORIGIN_LABEL: Record<string, string> = {
+  self_signup: "Joined",
+  import: "Imported",
+  welfare: "By welfare",
 };
 
 const STATUS_VARIANT: Record<MemberStatus, "success" | "neutral" | "warning" | "danger"> = {
@@ -118,7 +126,7 @@ export function RosterTable({ rows }: { rows: RosterRow[] }) {
 
       <Card>
         <CardContent className="p-0">
-          <div className="grid grid-cols-[2rem_1fr_1fr_1fr_auto] items-center gap-3 border-b border-[var(--border)] px-5 py-3 text-xs font-medium text-[var(--text-muted)]">
+          <div className="grid grid-cols-[2rem_1.3fr_1fr_auto_auto] items-center gap-3 border-b border-[var(--border)] px-5 py-3 text-xs font-medium text-[var(--text-muted)]">
             <input
               type="checkbox"
               checked={filtered.length > 0 && selected.size === filtered.length}
@@ -127,14 +135,14 @@ export function RosterTable({ rows }: { rows: RosterRow[] }) {
             />
             <span>Name</span>
             <span className="hidden sm:block">Subunit</span>
-            <span className="hidden sm:block">Location</span>
+            <span className="hidden sm:block">How joined</span>
             <span>Status</span>
           </div>
           <div className="divide-y divide-[var(--border)]">
             {filtered.map((r) => (
               <div
                 key={r.id}
-                className="grid grid-cols-[2rem_1fr_1fr_1fr_auto] items-center gap-3 px-5 py-3 text-sm"
+                className="grid grid-cols-[2rem_1.3fr_1fr_auto_auto] items-center gap-3 px-5 py-3 text-sm"
               >
                 <input
                   type="checkbox"
@@ -142,11 +150,16 @@ export function RosterTable({ rows }: { rows: RosterRow[] }) {
                   onChange={() => toggle(r.id)}
                   aria-label={`Select ${r.name}`}
                 />
-                <span className="truncate font-medium">{r.name}</span>
+                <div className="min-w-0">
+                  <span className="block truncate font-medium">{r.name}</span>
+                  {!r.claimed && (
+                    <span className="text-xs text-[var(--text-muted)]">not signed up yet</span>
+                  )}
+                </div>
                 <span className="hidden truncate text-[var(--text-muted)] sm:block">{r.subunit}</span>
-                <span className="hidden truncate text-[var(--text-muted)] sm:block">
-                  {r.location ?? "—"}
-                </span>
+                <Badge variant={r.origin === "self_signup" ? "success" : "neutral"}>
+                  {ORIGIN_LABEL[r.origin] ?? r.origin}
+                </Badge>
                 <Badge variant={STATUS_VARIANT[r.status]}>{r.status}</Badge>
               </div>
             ))}

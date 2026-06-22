@@ -226,6 +226,7 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
         whatsapp_number: whatsapp || null,
         member_status: "active",
         claimed: false,
+        member_origin: "import",
       });
       if (profErr) {
         await admin.auth.admin.deleteUser(userId);
