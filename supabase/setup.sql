@@ -642,3 +642,9 @@ alter table profiles add column if not exists claimed boolean not null default t
 alter table profiles add column if not exists member_origin text not null default 'self_signup';
 -- Backfill: anyone not yet claimed was added by import/welfare (treat as import).
 update profiles set member_origin = 'import' where claimed = false and member_origin = 'self_signup';
+
+
+-- Member birthdays (month/day only — year isn't collected). Used for welfare's
+-- upcoming-birthday panel and the on-the-day reminder.
+alter table profiles add column if not exists birth_month smallint;
+alter table profiles add column if not exists birth_day smallint;

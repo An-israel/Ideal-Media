@@ -9,6 +9,7 @@ export interface MemberColumnMap {
   whatsapp: string;
   primary_subunit: string;
   secondary_subunits: string;
+  birthday: string;
 }
 
 const MAP_TOOL: Anthropic.Tool = {
@@ -24,8 +25,9 @@ const MAP_TOOL: Anthropic.Tool = {
       whatsapp: { type: "string", description: "Header for WhatsApp number; may be the same as phone (empty string if none)." },
       primary_subunit: { type: "string", description: "Header for the person's main team/unit/department (empty string if none)." },
       secondary_subunits: { type: "string", description: "Header for any additional units, if present (empty string if none)." },
+      birthday: { type: "string", description: "Header for birthday / date of birth (empty string if none)." },
     },
-    required: ["full_name", "email", "phone", "whatsapp", "primary_subunit", "secondary_subunits"],
+    required: ["full_name", "email", "phone", "whatsapp", "primary_subunit", "secondary_subunits", "birthday"],
   },
 };
 
@@ -68,6 +70,7 @@ export async function mapMemberColumns(
     whatsapp: String(m.whatsapp ?? ""),
     primary_subunit: String(m.primary_subunit ?? ""),
     secondary_subunits: String(m.secondary_subunits ?? ""),
+    birthday: String(m.birthday ?? ""),
   };
 }
 

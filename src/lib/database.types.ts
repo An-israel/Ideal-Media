@@ -52,6 +52,8 @@ export type Profile = {
   claimed: boolean;
   /** How they joined: self_signup | import | welfare */
   member_origin: string;
+  birth_month: number | null;
+  birth_day: number | null;
   created_at: string;
 };
 

@@ -35,6 +35,23 @@ function pick(lookup: Record<string, string>, mappedHeader: string | undefined, 
 const firstToken = (s: string) => s.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)[0] ?? "";
 
 /** Tolerant subunit match: exact name/slug, partial contains, then first-word. */
+/** Parses a birthday cell (e.g. "6/27", "27/6", "June 27") to {month, day}. */
+function parseBirthday(raw: string): { month: number; day: number } | null {
+  const s = raw.trim();
+  if (!s) return null;
+  const m = s.match(/(\d{1,2})\s*[/.\-]\s*(\d{1,2})/);
+  if (m) {
+    let a = +m[1], b = +m[2];
+    // Sheet uses month/day; if the first number can't be a month, swap.
+    if (a > 12 && b <= 12) [a, b] = [b, a];
+    if (a >= 1 && a <= 12 && b >= 1 && b <= 31) return { month: a, day: b };
+    return null;
+  }
+  const d = new Date(s);
+  if (!isNaN(d.getTime()) && /[a-z]/i.test(s)) return { month: d.getMonth() + 1, day: d.getDate() };
+  return null;
+}
+
 // Common wording differences → the app's subunit name.
 const SUBUNIT_ALIASES: Record<string, string> = {
   "graphics design": "graphic design",
@@ -149,6 +166,7 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
       const whatsapp = pick(lookup, colMap?.whatsapp, ["whatsapp", "whatsapp number", "wa"]);
       const primaryName = pick(lookup, colMap?.primary_subunit, ["primary subunit", "subunit", "primary unit", "unit", "department", "dept", "team", "section", "media unit", "unit of service", "portfolio", "group"]);
       const secondaryRaw = pick(lookup, colMap?.secondary_subunits, ["secondary subunits", "secondary", "other subunits"]);
+      const bday = parseBirthday(pick(lookup, colMap?.birthday, ["birthday", "birth day", "date of birth", "dob", "d.o.b"]));
 
       const rowNum = i + 2;
       if (!fullName) {
@@ -227,6 +245,8 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
         member_status: "active",
         claimed: false,
         member_origin: "import",
+        birth_month: bday?.month ?? null,
+        birth_day: bday?.day ?? null,
       });
       if (profErr) {
         await admin.auth.admin.deleteUser(userId);

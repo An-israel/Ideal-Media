@@ -1,5 +1,52 @@
 import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 import { createAdminClient } from "@/lib/supabase/admin";
+
+export interface BirthdayPerson {
+  name: string;
+  whatsapp: string | null;
+  daysUntil: number;
+  label: string; // e.g. "Jun 27"
+}
+
+/** Today's + upcoming (next `windowDays`) birthdays among active members. */
+export async function getBirthdays(
+  supabase: SupabaseClient<Database>,
+  windowDays = 14
+): Promise<{ today: BirthdayPerson[]; upcoming: BirthdayPerson[] }> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("full_name, whatsapp_number, birth_month, birth_day")
+    .eq("member_status", "active")
+    .not("birth_month", "is", null);
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  const people: BirthdayPerson[] = [];
+  for (const p of data ?? []) {
+    const m = p.birth_month as number | null;
+    const d = p.birth_day as number | null;
+    if (!m || !d) continue;
+    let next = new Date(now.getFullYear(), m - 1, d);
+    if (next < startOfToday) next = new Date(now.getFullYear() + 1, m - 1, d);
+    const daysUntil = Math.round((next.getTime() - startOfToday.getTime()) / 86_400_000);
+    people.push({
+      name: p.full_name,
+      whatsapp: p.whatsapp_number,
+      daysUntil,
+      label: `${months[m - 1]} ${d}`,
+    });
+  }
+  people.sort((a, b) => a.daysUntil - b.daysUntil);
+
+  return {
+    today: people.filter((p) => p.daysUntil === 0),
+    upcoming: people.filter((p) => p.daysUntil > 0 && p.daysUntil <= windowDays),
+  };
+}
 
 /** Welfare team members (for the assignment dropdown). Admin read — welfare
  * users cannot list other users' roles under RLS. */
