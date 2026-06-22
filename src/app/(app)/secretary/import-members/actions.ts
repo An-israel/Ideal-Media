@@ -6,7 +6,7 @@ import { getSessionRoles } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readSheetRows } from "@/lib/attendance-parser";
 import { fetchSheetAsBuffer } from "@/lib/google-sheets";
-import { mapMemberColumns, type MemberColumnMap } from "@/lib/import-mapper";
+import { mapMemberColumns, mapSubunitValues, type MemberColumnMap } from "@/lib/import-mapper";
 import { ACCEPTED_UPLOAD_EXT, MAX_UPLOAD_BYTES } from "@/lib/constants";
 
 async function isSecretary() {
@@ -32,7 +32,9 @@ function pick(lookup: Record<string, string>, mappedHeader: string | undefined, 
   return field(lookup, heuristics);
 }
 
-/** Tolerant subunit match: exact name/slug, then partial contains either way. */
+const firstToken = (s: string) => s.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)[0] ?? "";
+
+/** Tolerant subunit match: exact name/slug, partial contains, then first-word. */
 function matchSubunit(subunits: { id: string; name: string; slug: string }[], value: string): string | undefined {
   const v = value.trim().toLowerCase();
   if (!v) return undefined;
@@ -40,6 +42,11 @@ function matchSubunit(subunits: { id: string; name: string; slug: string }[], va
   for (const s of subunits) {
     const n = s.name.toLowerCase();
     if (v.includes(n) || n.includes(v)) return s.id;
+  }
+  // First significant word (e.g. "Utility (Technical in Media)" → "Utility …").
+  const ft = firstToken(v);
+  if (ft.length > 2) {
+    for (const s of subunits) if (firstToken(s.name) === ft) return s.id;
   }
   return undefined;
 }
@@ -97,6 +104,29 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
       colMap = null;
     }
 
+    // AI-map the distinct subunit values in the sheet to our existing subunits,
+    // so messy names ("Utility (Technical in Media)") still match.
+    const distinctSubunitValues = new Set<string>();
+    for (const r of rows) {
+      const lk: Record<string, string> = {};
+      for (const [k, v] of Object.entries(r)) lk[k.trim().toLowerCase()] = String(v ?? "");
+      const pv = pick(lk, colMap?.primary_subunit, ["primary subunit", "subunit", "primary unit", "unit"]);
+      if (pv) distinctSubunitValues.add(pv);
+    }
+    let aiSubunitMap: Record<string, string> = {};
+    try {
+      aiSubunitMap = await mapSubunitValues([...distinctSubunitValues], subunits.map((s) => s.name));
+    } catch {
+      aiSubunitMap = {};
+    }
+
+    const resolveSubunit = (value: string): string | undefined => {
+      const direct = matchSubunit(subunits, value);
+      if (direct) return direct;
+      const mapped = aiSubunitMap[value.trim().toLowerCase()];
+      return mapped ? matchSubunit(subunits, mapped) : undefined;
+    };
+
     const result: ImportResult = { created: 0, skipped: [] };
 
     for (let i = 0; i < rows.length; i++) {
@@ -115,8 +145,8 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
         result.skipped.push({ row: rowNum, name: "(no name)", reason: "no name found in the row" });
         continue;
       }
-      // Subunit: match from the row, else fall back to the chosen default.
-      const primaryId = matchSubunit(subunits, primaryName) || defaultSubunitId || undefined;
+      // Subunit: match from the row (direct + AI), else fall back to the default.
+      const primaryId = resolveSubunit(primaryName) || defaultSubunitId || undefined;
       if (!primaryId) {
         result.skipped.push({
           row: rowNum,
@@ -188,7 +218,7 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
       }[] = [{ user_id: userId, subunit_id: primaryId, membership_type: "primary" }];
       if (secondaryRaw) {
         for (const sName of secondaryRaw.split(/[,;/]/).map((s) => s.trim()).filter(Boolean)) {
-          const sid = matchSubunit(subunits, sName);
+          const sid = resolveSubunit(sName);
           if (sid && sid !== primaryId) {
             memberships.push({ user_id: userId, subunit_id: sid, membership_type: "secondary" });
           }

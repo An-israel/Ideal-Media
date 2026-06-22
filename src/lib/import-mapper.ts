@@ -71,6 +71,7 @@ export async function mapMemberColumns(
   };
 }
 
+/** Same idea as mapMemberColumns, for a past-attendance sheet (one row per record). */
 export interface AttendanceColumnMap {
   email: string;
   name: string;
@@ -127,4 +128,65 @@ export async function mapAttendanceColumns(
     date: String(m.date ?? ""),
     status: String(m.status ?? ""),
   };
+}
+
+const SUBUNIT_MAP_TOOL: Anthropic.Tool = {
+  name: "map_subunits",
+  description: "Match each spreadsheet subunit/unit value to the existing subunit it best corresponds to.",
+  input_schema: {
+    type: "object",
+    properties: {
+      mappings: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            value: { type: "string", description: "The value as written in the sheet." },
+            subunit: { type: "string", description: "The EXACT existing subunit name it matches, or empty string if none is reasonable." },
+          },
+          required: ["value", "subunit"],
+        },
+      },
+    },
+    required: ["mappings"],
+  },
+};
+
+/**
+ * Maps the messy subunit/unit values found in a sheet to our existing subunit
+ * names (e.g. "Utility (Technical in Media)" → "Utility (Videography &
+ * Technical)"). Returns a lowercase-value → existing-name map. Best-effort.
+ */
+export async function mapSubunitValues(
+  values: string[],
+  existingSubunits: string[]
+): Promise<Record<string, string>> {
+  if (values.length === 0) return {};
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+
+  const prompt =
+    "These are the only existing subunits (choose from these EXACT names):\n" +
+    JSON.stringify(existingSubunits) +
+    "\n\nA spreadsheet uses these subunit/unit values:\n" +
+    JSON.stringify(values) +
+    "\n\nFor each value, choose the existing subunit it best corresponds to (copy the " +
+    "exact existing name). Use an empty string only if truly none is reasonable. " +
+    "Report via the tool.";
+
+  const res = await client.messages.create({
+    model: ATTENDANCE_PARSE_MODEL,
+    max_tokens: 2048,
+    tools: [SUBUNIT_MAP_TOOL],
+    tool_choice: { type: "tool", name: SUBUNIT_MAP_TOOL.name },
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const block = res.content.find((b) => b.type === "tool_use");
+  if (!block || block.type !== "tool_use") return {};
+  const out: Record<string, string> = {};
+  const data = block.input as { mappings?: { value: string; subunit: string }[] };
+  for (const item of data.mappings ?? []) {
+    if (item.value) out[item.value.trim().toLowerCase()] = item.subunit ?? "";
+  }
+  return out;
 }
