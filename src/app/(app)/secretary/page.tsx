@@ -1,74 +1,72 @@
-import Link from "next/link";
-import { ClipboardList, Users, ArrowRight, UploadCloud, CalendarClock, Table2 } from "lucide-react";
-import { PageHeader } from "@/components/app/page-header";
-import { Card, CardContent } from "@/components/ui/card";
+import { createClient } from "@/lib/supabase/server";
+import { SecretaryWorkspace, type GridMember } from "./secretary-workspace";
 
-function HubCard({
-  href,
-  icon: Icon,
-  title,
-  description,
+export default async function SecretaryPage({
+  searchParams,
 }: {
-  href: string;
-  icon: typeof Users;
-  title: string;
-  description: string;
+  searchParams: Promise<{ activity?: string }>;
 }) {
+  const { activity } = await searchParams;
+  const supabase = await createClient();
+
+  const { data: activities } = await supabase
+    .from("activities")
+    .select("id, name, is_attendance_signal")
+    .order("name");
+  const list = activities ?? [];
+  const activityId = activity || list.find((a) => a.is_attendance_signal)?.id || list[0]?.id || "";
+
+  let dates: string[] = [];
+  const gridMembers: GridMember[] = [];
+
+  if (activityId) {
+    const [{ data: members }, { data: records }] = await Promise.all([
+      supabase
+        .from("subunit_members")
+        .select("user_id, profiles(full_name), subunits(name)")
+        .eq("membership_type", "primary"),
+      supabase
+        .from("attendance_records")
+        .select("user_id, service_date, status")
+        .eq("activity_id", activityId)
+        .order("service_date", { ascending: false })
+        .limit(4000),
+    ]);
+
+    dates = [...new Set((records ?? []).map((r) => r.service_date))].slice(0, 14).reverse();
+
+    const byUser = new Map<string, Record<string, string>>();
+    for (const r of records ?? []) {
+      const m = byUser.get(r.user_id) ?? {};
+      m[r.service_date] = r.status;
+      byUser.set(r.user_id, m);
+    }
+
+    type Row = { user_id: string; profiles: { full_name: string } | null; subunits: { name: string } | null };
+    const seen = new Set<string>();
+    for (const m of (members ?? []) as unknown as Row[]) {
+      if (!m.profiles || seen.has(m.user_id)) continue;
+      seen.add(m.user_id);
+      const statuses = byUser.get(m.user_id) ?? {};
+      const counted = dates.filter((d) => statuses[d] === "present" || statuses[d] === "absent");
+      const present = counted.filter((d) => statuses[d] === "present").length;
+      gridMembers.push({
+        id: m.user_id,
+        name: m.profiles.full_name,
+        subunit: m.subunits?.name ?? "",
+        statuses,
+        rate: counted.length ? Math.round((present / counted.length) * 100) : null,
+      });
+    }
+    gridMembers.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   return (
-    <Link href={href}>
-      <Card className="h-full transition-colors hover:border-[var(--accent)]">
-        <CardContent className="flex items-start gap-4 pt-6">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent)]/10 text-[var(--accent)]">
-            <Icon className="h-5 w-5" />
-          </span>
-          <div className="flex-1">
-            <p className="font-medium">{title}</p>
-            <p className="text-sm text-[var(--text-muted)]">{description}</p>
-          </div>
-          <ArrowRight className="h-4 w-4 text-[var(--text-muted)]" />
-        </CardContent>
-      </Card>
-    </Link>
+    <SecretaryWorkspace
+      activities={list}
+      activeActivityId={activityId}
+      dates={dates}
+      members={gridMembers}
+    />
   );
 }
-
-export default function SecretaryPage() {
-  return (
-    <div>
-      <PageHeader title="Secretary" description="Attendance uploads and roster management." />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <HubCard
-          href="/secretary/attendance"
-          icon={ClipboardList}
-          title="Attendance"
-          description="Upload a weekly sheet or photo, review the AI mapping, and commit."
-        />
-        <HubCard
-          href="/secretary/attendance-records"
-          icon={Table2}
-          title="View attendance"
-          description="See who attended each service, per member, with rates."
-        />
-        <HubCard
-          href="/secretary/roster"
-          icon={Users}
-          title="Roster"
-          description="Set member status (active, inactive, traveled, graduated, left)."
-        />
-        <HubCard
-          href="/secretary/import-members"
-          icon={UploadCloud}
-          title="Import members"
-          description="Add your whole team at once from a spreadsheet."
-        />
-        <HubCard
-          href="/secretary/import-attendance"
-          icon={CalendarClock}
-          title="Import past attendance"
-          description="Load historical attendance records in one go."
-        />
-      </div>
-    </div>
-  );
-}
-
