@@ -58,9 +58,15 @@ export function SignupForm({
   }
 
   function toggleSecondary(id: string) {
-    setSecondaryIds((ids) =>
-      ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]
-    );
+    setSecondaryIds((ids) => {
+      if (ids.includes(id)) return ids.filter((x) => x !== id);
+      if (ids.length >= 3) {
+        setError("You can pick up to 3 secondary subunits (4 total with your primary).");
+        return ids;
+      }
+      setError(null);
+      return [...ids, id];
+    });
   }
 
   async function submit() {
@@ -169,7 +175,7 @@ export function SignupForm({
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Secondary subunits (optional)</Label>
+              <Label>Secondary subunits (optional, up to 3)</Label>
               <div className="flex flex-wrap gap-2">
                 {secondary.map((s) => (
                   <button

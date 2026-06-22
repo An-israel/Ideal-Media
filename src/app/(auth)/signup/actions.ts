@@ -177,8 +177,10 @@ export async function signUpAction(input: SignupInput): Promise<SignupResult> {
 
   const memberships = [
     { subunit_id: primarySubunitId, user_id: userId, membership_type: "primary" as const },
+    // At most 3 secondary subunits (4 total, incl. the primary).
     ...input.secondarySubunitIds
       .filter((id) => id && id !== primarySubunitId)
+      .slice(0, 3)
       .map((id) => ({ subunit_id: id, user_id: userId, membership_type: "secondary" as const })),
   ];
   const { error: memberErr } = await admin.from("subunit_members").insert(memberships);

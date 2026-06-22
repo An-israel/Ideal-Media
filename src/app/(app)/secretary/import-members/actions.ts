@@ -145,9 +145,20 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
         result.skipped.push({ row: rowNum, name: "(no name)", reason: "no name found in the row" });
         continue;
       }
-      // Subunit: match from the row (direct + AI), else fall back to the default.
-      const primaryId = resolveSubunit(primaryName) || defaultSubunitId || undefined;
-      if (!primaryId) {
+      // A member can belong to up to 4 subunits (1 home + up to 3 more), read
+      // from the subunit column(s); values may be comma/semicolon/slash separated.
+      const unitValues = [primaryName, secondaryRaw]
+        .join(",")
+        .split(/[,;/]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const matchedIds: string[] = [];
+      for (const val of unitValues) {
+        const id = resolveSubunit(val);
+        if (id && !matchedIds.includes(id)) matchedIds.push(id);
+      }
+      if (matchedIds.length === 0 && defaultSubunitId) matchedIds.push(defaultSubunitId);
+      if (matchedIds.length === 0) {
         result.skipped.push({
           row: rowNum,
           name: fullName,
@@ -157,6 +168,9 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
         });
         continue;
       }
+      const capped = matchedIds.slice(0, 4); // at most four
+      const primaryId = capped[0];
+      const secondaryIds = capped.slice(1);
 
       // Skip if already in the system (by email if present, else by phone).
       if (email) {
@@ -215,15 +229,14 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
         user_id: string;
         subunit_id: string;
         membership_type: "primary" | "secondary";
-      }[] = [{ user_id: userId, subunit_id: primaryId, membership_type: "primary" }];
-      if (secondaryRaw) {
-        for (const sName of secondaryRaw.split(/[,;/]/).map((s) => s.trim()).filter(Boolean)) {
-          const sid = resolveSubunit(sName);
-          if (sid && sid !== primaryId) {
-            memberships.push({ user_id: userId, subunit_id: sid, membership_type: "secondary" });
-          }
-        }
-      }
+      }[] = [
+        { user_id: userId, subunit_id: primaryId, membership_type: "primary" },
+        ...secondaryIds.map((id) => ({
+          user_id: userId,
+          subunit_id: id,
+          membership_type: "secondary" as const,
+        })),
+      ];
       await admin.from("subunit_members").insert(memberships);
 
       result.created++;
