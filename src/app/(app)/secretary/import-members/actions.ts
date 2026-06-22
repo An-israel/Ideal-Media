@@ -137,7 +137,7 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
       const email = pick(lookup, colMap?.email, ["email", "email address"]).toLowerCase();
       const phone = pick(lookup, colMap?.phone, ["phone", "phone number"]);
       const whatsapp = pick(lookup, colMap?.whatsapp, ["whatsapp", "whatsapp number", "wa"]);
-      const primaryName = pick(lookup, colMap?.primary_subunit, ["primary subunit", "subunit", "primary unit", "unit"]);
+      const primaryName = pick(lookup, colMap?.primary_subunit, ["primary subunit", "subunit", "primary unit", "unit", "department", "dept", "team", "section", "media unit", "unit of service", "portfolio", "group"]);
       const secondaryRaw = pick(lookup, colMap?.secondary_subunits, ["secondary subunits", "secondary", "other subunits"]);
 
       const rowNum = i + 2;
@@ -229,7 +229,17 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
       result.created++;
     }
 
+    // Clear top-level guidance when nothing imported.
+    if (result.created === 0 && result.skipped.length > 0) {
+      const noSubunit = result.skipped.filter((s) => s.reason.toLowerCase().includes("subunit")).length;
+      result.error =
+        noSubunit === result.skipped.length
+          ? "No members created: I couldn't find a subunit/unit column in your sheet. Pick a “Default subunit” above and import again."
+          : "No members were created — see the reasons listed below.";
+    }
+
     revalidatePath("/secretary/roster");
+    revalidatePath("/secretary");
     return result;
   } catch (e) {
     return { ...empty, error: e instanceof Error ? e.message : String(e) };

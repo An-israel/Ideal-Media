@@ -67,18 +67,16 @@ export function ImportMembersForm({ subunits }: { subunits: { id: string; name: 
           </Button>
         </form>
 
-        {result?.error && (
-          <div className="rounded-xl border border-[var(--danger)]/30 bg-[var(--danger)]/10 p-4 text-sm text-[var(--danger)]">
-            {result.error}
-          </div>
-        )}
-
-        {result && !result.error && (
+        {result && (
           <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4">
-            <p className="flex items-center gap-2 text-sm font-medium text-[var(--success)]">
-              <CheckCircle2 className="h-4 w-4" />
-              Created {result.created} member{result.created === 1 ? "" : "s"}.
-            </p>
+            {result.error ? (
+              <p className="text-sm font-medium text-[var(--danger)]">{result.error}</p>
+            ) : (
+              <p className="flex items-center gap-2 text-sm font-medium text-[var(--success)]">
+                <CheckCircle2 className="h-4 w-4" />
+                Created {result.created} member{result.created === 1 ? "" : "s"}.
+              </p>
+            )}
             {result.skipped.length > 0 && (
               <div>
                 <p className="text-sm font-medium">
