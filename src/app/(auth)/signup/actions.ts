@@ -59,23 +59,33 @@ export async function signUpAction(input: SignupInput): Promise<SignupResult> {
   }
 
   const admin = createAdminClient();
-  const phone = (input.whatsappNumber || input.phone || "").replace(/[^\d+]/g, "");
+  // Match by the last 10 digits so 0803… and +234803… are treated as the same.
+  const last10 = (p: string) => p.replace(/\D/g, "").slice(-10);
+  const phoneKey = last10(input.whatsappNumber || input.phone || "");
 
-  // Look for an existing record — first by email, then by phone.
-  let match: { id: string; email: string; claimed: boolean } | null = null;
-  const { data: byEmail } = await admin
+  // Pull existing members and match by email, then by phone (in code, so phone
+  // formatting differences don't cause a miss → no accidental duplicate).
+  const { data: allProfiles } = await admin
     .from("profiles")
-    .select("id, email, claimed")
-    .eq("email", lowerEmail)
-    .limit(1);
-  if (byEmail && byEmail.length) match = byEmail[0];
-  if (!match && phone) {
-    const { data: byPhone } = await admin
-      .from("profiles")
-      .select("id, email, claimed")
-      .or(`whatsapp_number.eq.${phone},phone.eq.${phone}`)
-      .limit(1);
-    if (byPhone && byPhone.length) match = byPhone[0];
+    .select("id, email, phone, whatsapp_number, claimed");
+
+  let match: { id: string; email: string; claimed: boolean } | null = null;
+  for (const p of allProfiles ?? []) {
+    if (p.email && p.email.toLowerCase() === lowerEmail) {
+      match = { id: p.id, email: p.email, claimed: p.claimed };
+      break;
+    }
+  }
+  if (!match && phoneKey.length >= 7) {
+    for (const p of allProfiles ?? []) {
+      if (
+        (p.phone && last10(p.phone) === phoneKey) ||
+        (p.whatsapp_number && last10(p.whatsapp_number) === phoneKey)
+      ) {
+        match = { id: p.id, email: p.email, claimed: p.claimed };
+        break;
+      }
+    }
   }
 
   // ---- Claim an imported, unclaimed record ----
@@ -188,10 +198,9 @@ export async function signUpAction(input: SignupInput): Promise<SignupResult> {
 
   await enrollPrimaryCourses(admin, userId, primarySubunitId);
 
-  // Welfare sees every new member (Section 6 / 10).
-  await admin
-    .from("welfare_followups")
-    .insert({ user_id: userId, reason: "new_member", auto_flagged: true });
+  // NOTE: self sign-ups are NOT flagged as new members — they're existing team
+  // members claiming/registering. Only welfare-added people become new-member
+  // welfare follow-ups (see welfare addNewMember).
 
   return { ok: true, signInEmail: lowerEmail };
 }
