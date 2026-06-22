@@ -35,9 +35,19 @@ function pick(lookup: Record<string, string>, mappedHeader: string | undefined, 
 const firstToken = (s: string) => s.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)[0] ?? "";
 
 /** Tolerant subunit match: exact name/slug, partial contains, then first-word. */
+// Common wording differences → the app's subunit name.
+const SUBUNIT_ALIASES: Record<string, string> = {
+  "graphics design": "graphic design",
+  "graphic designs": "graphic design",
+  "graphics": "graphic design",
+  publicity: "publication",
+  publications: "publication",
+};
+
 function matchSubunit(subunits: { id: string; name: string; slug: string }[], value: string): string | undefined {
-  const v = value.trim().toLowerCase();
+  let v = value.trim().toLowerCase();
   if (!v) return undefined;
+  if (SUBUNIT_ALIASES[v]) v = SUBUNIT_ALIASES[v];
   for (const s of subunits) if (s.name.toLowerCase() === v || s.slug.toLowerCase() === v) return s.id;
   for (const s of subunits) {
     const n = s.name.toLowerCase();
