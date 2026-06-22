@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ClipboardList, Users, ArrowRight, UploadCloud, CalendarClock } from "lucide-react";
+import { ClipboardList, Users, ArrowRight, UploadCloud, CalendarClock, Table2 } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -42,6 +42,12 @@ export default function SecretaryPage() {
           icon={ClipboardList}
           title="Attendance"
           description="Upload a weekly sheet or photo, review the AI mapping, and commit."
+        />
+        <HubCard
+          href="/secretary/attendance-records"
+          icon={Table2}
+          title="View attendance"
+          description="See who attended each service, per member, with rates."
         />
         <HubCard
           href="/secretary/roster"
