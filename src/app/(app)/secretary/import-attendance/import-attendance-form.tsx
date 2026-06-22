@@ -6,14 +6,18 @@ import { Upload, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { SheetSource } from "@/components/app/sheet-source";
 import { toast } from "@/components/ui/toaster";
-import { importPastAttendance, type AttendanceImportResult } from "./actions";
+import { cn } from "@/lib/utils";
+import { importPastAttendance, importWideAttendance, type AttendanceImportResult } from "./actions";
 
 export function ImportAttendanceForm({ activities }: { activities: { id: string; name: string }[] }) {
   const router = useRouter();
+  const [mode, setMode] = useState<"long" | "wide">("long");
   const [activityId, setActivityId] = useState(activities[0]?.id ?? "");
+  const [year, setYear] = useState(String(new Date().getFullYear()));
   const [file, setFile] = useState<File | null>(null);
   const [sheetUrl, setSheetUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,7 +33,8 @@ export function ImportAttendanceForm({ activities }: { activities: { id: string;
       if (sheetUrl.trim()) fd.set("sheetUrl", sheetUrl.trim());
       else if (file) fd.set("file", file);
       fd.set("activityId", activityId);
-      const res = await importPastAttendance(fd);
+      fd.set("year", year);
+      const res = mode === "wide" ? await importWideAttendance(fd) : await importPastAttendance(fd);
       setResult(res);
       router.refresh();
     } catch (err) {
@@ -44,7 +49,27 @@ export function ImportAttendanceForm({ activities }: { activities: { id: string;
       <CardContent className="space-y-4 pt-6">
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-2">
-            <Label>Activity</Label>
+            <Label>Sheet layout</Label>
+            <div className="flex w-max gap-1 rounded-lg border border-[var(--border)] p-1 text-sm">
+              <button
+                type="button"
+                onClick={() => setMode("long")}
+                className={cn("rounded-md px-3 py-1.5", mode === "long" ? "bg-[var(--accent)] text-[var(--accent-foreground)]" : "text-[var(--text-muted)]")}
+              >
+                One row per record
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("wide")}
+                className={cn("rounded-md px-3 py-1.5", mode === "wide" ? "bg-[var(--accent)] text-[var(--accent-foreground)]" : "text-[var(--text-muted)]")}
+              >
+                Register (dates across the top)
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>{mode === "wide" ? "Default activity (for undated/unlabeled columns)" : "Activity"}</Label>
             <Select value={activityId} onChange={(e) => setActivityId(e.target.value)}>
               {activities.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -53,6 +78,23 @@ export function ImportAttendanceForm({ activities }: { activities: { id: string;
               ))}
             </Select>
           </div>
+
+          {mode === "wide" && (
+            <div className="space-y-2">
+              <Label>Year of these services</Label>
+              <Input
+                type="number"
+                value={year}
+                onChange={(e) => setYear(e.target.value)}
+                className="w-28"
+              />
+              <p className="text-xs text-[var(--text-muted)]">
+                Column headers like “SUN 30/11” have no year — this is added. SUN columns →
+                Sunday Service, WED → Bible Study; others use the default activity.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label>Attendance spreadsheet</Label>
             <SheetSource file={file} setFile={setFile} sheetUrl={sheetUrl} setSheetUrl={setSheetUrl} />

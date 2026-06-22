@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getSessionRoles } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { readSheetRows, normalizeStatus } from "@/lib/attendance-parser";
+import { readSheetRows, readSheetMatrix, normalizeStatus } from "@/lib/attendance-parser";
 import { fetchSheetAsBuffer } from "@/lib/google-sheets";
 import { mapAttendanceColumns, type AttendanceColumnMap } from "@/lib/import-mapper";
 import { recomputeMissedService } from "@/lib/welfare-automation";
@@ -152,6 +152,138 @@ export async function importPastAttendance(formData: FormData): Promise<Attendan
   revalidatePath("/secretary/attendance");
   revalidatePath("/welfare");
   return result;
+  } catch (e) {
+    return { ...empty, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * Imports a WIDE attendance register (names down the side, service dates across
+ * the top — e.g. "WED 26/11", "SUN 30/11"). A present mark ("YES"/✓/P) = present,
+ * blank = absent. Activity is inferred per column (SUN → Sunday Service, WED →
+ * Bible Study), otherwise the chosen default activity. Month-only columns
+ * (MARCH, APRIL…) and other non-date columns are ignored.
+ */
+export async function importWideAttendance(formData: FormData): Promise<AttendanceImportResult> {
+  const empty: AttendanceImportResult = { imported: 0, skipped: [] };
+  try {
+    if (!(await isSecretary())) return { ...empty, error: "Secretary access required." };
+
+    const file = formData.get("file") as File | null;
+    const sheetUrl = String(formData.get("sheetUrl") ?? "").trim();
+    const defaultActivityId = String(formData.get("activityId") ?? "");
+    const year = parseInt(String(formData.get("year") ?? ""), 10) || new Date().getFullYear();
+    if (!defaultActivityId) return { ...empty, error: "Pick a default activity." };
+
+    let buffer: Buffer;
+    if (sheetUrl) {
+      buffer = await fetchSheetAsBuffer(sheetUrl);
+    } else if (file) {
+      const name = file.name.toLowerCase();
+      if (!ACCEPTED_UPLOAD_EXT.some((ext) => name.endsWith(ext))) {
+        return { ...empty, error: "Please upload a .xlsx or .csv file." };
+      }
+      if (file.size > MAX_UPLOAD_BYTES) return { ...empty, error: "File exceeds the 5MB limit." };
+      buffer = Buffer.from(await file.arrayBuffer());
+    } else {
+      return { ...empty, error: "Upload a file or paste a Google Sheet link." };
+    }
+
+    const matrix = readSheetMatrix(buffer);
+    if (matrix.length < 2) return { ...empty, error: "That sheet looks empty." };
+    const headers = matrix[0];
+    const norm = (h: string) => h.trim().toLowerCase();
+
+    const nameIdx = headers.findIndex((h) => /name/.test(norm(h)) && !/phone/.test(norm(h)));
+    if (nameIdx < 0) return { ...empty, error: "Couldn't find a Name column in the register." };
+    const phoneIdx = headers.findIndex((h) => /phone/.test(norm(h)));
+
+    const admin = createAdminClient();
+    const { data: acts } = await admin.from("activities").select("id, name");
+    const findAct = (kw: string) => (acts ?? []).find((a) => a.name.toLowerCase().includes(kw))?.id;
+    const sundayId = findAct("sunday");
+    const bibleId = findAct("bible") || findAct("wednesday");
+
+    // Detect dated service columns (header has a day/month like 30/11, or a date).
+    const dateCols: { c: number; iso: string; act: string }[] = [];
+    for (let c = 0; c < headers.length; c++) {
+      if (c === nameIdx || c === phoneIdx) continue;
+      const h = headers[c];
+      let iso: string | null = null;
+      const m = h.match(/(\d{1,2})\s*[/.\-]\s*(\d{1,2})/);
+      if (m) {
+        const d = +m[1], mo = +m[2];
+        if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12) {
+          iso = `${year}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+        }
+      } else if (/\d/.test(h)) {
+        const dt = new Date(h);
+        if (!isNaN(dt.getTime())) iso = dt.toISOString().slice(0, 10);
+      }
+      if (!iso) continue;
+      const act = /wed/i.test(h)
+        ? bibleId || defaultActivityId
+        : /sun/i.test(h)
+        ? sundayId || defaultActivityId
+        : defaultActivityId;
+      dateCols.push({ c, iso, act });
+    }
+    if (dateCols.length === 0) {
+      return { ...empty, error: "No dated service columns found (e.g. 'SUN 30/11'). Check the file/year." };
+    }
+
+    const { data: profiles } = await admin.from("profiles").select("id, full_name, phone, whatsapp_number");
+    const last10 = (p: string) => p.replace(/\D/g, "").slice(-10);
+    const byPhone = new Map<string, string>();
+    const byName = new Map<string, string>();
+    for (const p of profiles ?? []) {
+      if (p.phone && last10(p.phone)) byPhone.set(last10(p.phone), p.id);
+      if (p.whatsapp_number && last10(p.whatsapp_number)) byPhone.set(last10(p.whatsapp_number), p.id);
+      byName.set(p.full_name.trim().toLowerCase(), p.id);
+    }
+    const presentMarks = ["yes", "y", "p", "present", "1", "true", "✓", "✔", "x"];
+
+    const records: {
+      user_id: string;
+      activity_id: string;
+      service_date: string;
+      status: AttendanceStatus;
+      source: "manual";
+    }[] = [];
+    const result: AttendanceImportResult = { imported: 0, skipped: [] };
+
+    for (let r = 1; r < matrix.length; r++) {
+      const row = matrix[r];
+      const name = String(row[nameIdx] ?? "").trim();
+      if (!name) continue;
+      const ph = phoneIdx >= 0 ? last10(String(row[phoneIdx] ?? "")) : "";
+      const userId = (ph && byPhone.get(ph)) || byName.get(name.toLowerCase());
+      if (!userId) {
+        result.skipped.push({ row: r + 1, reason: `no member match: ${name}` });
+        continue;
+      }
+      for (const dc of dateCols) {
+        const cell = String(row[dc.c] ?? "").trim().toLowerCase();
+        const status: AttendanceStatus = presentMarks.includes(cell) ? "present" : "absent";
+        records.push({ user_id: userId, activity_id: dc.act, service_date: dc.iso, status, source: "manual" });
+      }
+    }
+
+    if (records.length) {
+      // Upsert in chunks to stay within payload limits.
+      for (let i = 0; i < records.length; i += 1000) {
+        const { error } = await admin
+          .from("attendance_records")
+          .upsert(records.slice(i, i + 1000), { onConflict: "user_id,activity_id,service_date" });
+        if (error) return { ...result, error: error.message };
+      }
+      result.imported = records.length;
+      if (sundayId) await recomputeMissedService(sundayId);
+    }
+
+    revalidatePath("/secretary");
+    revalidatePath("/welfare");
+    return result;
   } catch (e) {
     return { ...empty, error: e instanceof Error ? e.message : String(e) };
   }

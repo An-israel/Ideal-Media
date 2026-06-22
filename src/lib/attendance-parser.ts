@@ -29,6 +29,16 @@ export function readSheetRows(
   );
 }
 
+/** Reads a sheet as a raw matrix of strings (row 0 = headers). For wide
+ * "register" layouts where dates run across the top. */
+export function readSheetMatrix(buffer: Buffer): string[][] {
+  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  if (!ws) return [];
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
+  return (aoa as unknown[][]).map((row) => row.map((c) => String(c ?? "")));
+}
+
 // Single tool whose input_schema is the exact JSON shape we want back. Forcing
 // this tool (tool_choice) gives strict, parseable JSON instead of prose.
 const PROPOSAL_TOOL: Anthropic.Tool = {
