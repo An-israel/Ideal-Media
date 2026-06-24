@@ -31,8 +31,12 @@ export default async function EditCoursePage({
     content_url: string | null;
     content_urls: string[] | null;
     content_body: string | null;
-    assignments: { instructions: string }[];
+    // PostgREST returns a to-one embed (assignments.module_id is unique) as an
+    // object, but older/array shapes are possible — handle both.
+    assignments: { instructions: string } | { instructions: string }[] | null;
   };
+  const firstAssignment = (a: Row["assignments"]) =>
+    (Array.isArray(a) ? a[0] : a)?.instructions ?? "";
   const editorModules: EditorModule[] = ((modules ?? []) as unknown as Row[]).map((m) => {
     const urls = m.content_urls && m.content_urls.length > 0
       ? m.content_urls
@@ -46,7 +50,7 @@ export default async function EditCoursePage({
       content_type: m.content_type,
       content_urls: urls.length > 0 ? urls : [""],
       content_body: m.content_body ?? "",
-      instructions: m.assignments?.[0]?.instructions ?? "",
+      instructions: firstAssignment(m.assignments),
     };
   });
 

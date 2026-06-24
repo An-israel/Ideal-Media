@@ -35,7 +35,7 @@ export type ModuleProgressStatus =
 export type UploadStatus = "parsing" | "needs_review" | "committed" | "discarded";
 export type AttendanceStatus = "present" | "absent" | "traveled" | "excused";
 export type AttendanceSource = "sheet_upload" | "manual";
-export type WelfareReason = "new_member" | "missed_service" | "traveled";
+export type WelfareReason = "new_member" | "missed_service" | "traveled" | "inactive";
 export type WelfareStatus = "pending" | "in_progress" | "contacted" | "resolved";
 
 export type Profile = {

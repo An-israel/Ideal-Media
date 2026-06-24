@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionRoles } from "@/lib/auth";
+import { notify } from "@/lib/notify";
+import { getWelfareTeam } from "@/lib/welfare-queries";
 import type { MemberStatus } from "@/lib/database.types";
 
 async function requireSecretary() {
@@ -27,7 +29,67 @@ export async function setMemberStatus(userIds: string[], status: MemberStatus) {
     .in("id", userIds);
   if (error) throw new Error(error.message);
 
+  // Marking someone traveled/inactive opens a welfare follow-up and notifies
+  // the welfare team so they know to check in. Returning to active resolves it.
+  await syncWelfareForStatus(userIds, status);
+
   revalidatePath("/secretary/roster");
+  revalidatePath("/secretary");
+  revalidatePath("/welfare");
+}
+
+async function syncWelfareForStatus(userIds: string[], status: MemberStatus) {
+  const admin = createAdminClient();
+
+  if (status === "traveled" || status === "inactive") {
+    const reason = status; // both are valid welfare_reason values
+    // Skip anyone who already has an open follow-up for this reason.
+    const { data: existing } = await admin
+      .from("welfare_followups")
+      .select("user_id")
+      .eq("reason", reason)
+      .neq("status", "resolved")
+      .in("user_id", userIds);
+    const alreadyOpen = new Set((existing ?? []).map((r) => r.user_id));
+    const toFlag = userIds.filter((id) => !alreadyOpen.has(id));
+    if (toFlag.length === 0) return;
+
+    await admin
+      .from("welfare_followups")
+      .insert(toFlag.map((user_id) => ({ user_id, reason, auto_flagged: true })));
+
+    // Notify the welfare team, naming who needs a follow-up.
+    const { data: profs } = await admin
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", toFlag);
+    const names = (profs ?? []).map((p) => p.full_name);
+    const label = reason === "traveled" ? "traveled" : "inactive";
+    const team = await getWelfareTeam();
+    const shown = names.slice(0, 5).join(", ");
+    const more = names.length > 5 ? ` and ${names.length - 5} more` : "";
+    for (const t of team) {
+      await notify({
+        userId: t.id,
+        type: `member_${reason}`,
+        title:
+          toFlag.length === 1
+            ? `${names[0]} was marked ${label}`
+            : `${toFlag.length} members were marked ${label}`,
+        body: `Please follow up: ${shown}${more}.`,
+        link: "/welfare",
+      });
+    }
+  } else if (status === "active") {
+    // Returning members: close any auto-opened traveled/inactive follow-ups.
+    await admin
+      .from("welfare_followups")
+      .update({ status: "resolved" })
+      .in("user_id", userIds)
+      .in("reason", ["traveled", "inactive"])
+      .eq("auto_flagged", true)
+      .neq("status", "resolved");
+  }
 }
 
 /**

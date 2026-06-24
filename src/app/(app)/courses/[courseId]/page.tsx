@@ -69,9 +69,12 @@ export default async function CoursePlayerPage({
     content_url: string | null;
     content_urls: string[] | null;
     content_body: string | null;
-    assignments: { instructions: string }[];
+    // To-one embed: PostgREST returns an object (module_id is unique), not an array.
+    assignments: { instructions: string } | { instructions: string }[] | null;
   };
   const rows = (modules ?? []) as unknown as Row[];
+  const firstInstructions = (a: Row["assignments"]) =>
+    (Array.isArray(a) ? a[0] : a)?.instructions ?? null;
 
   const playerModules: PlayerModule[] = rows.map((m, i) => {
     const prev = i > 0 ? rows[i - 1] : null;
@@ -90,7 +93,7 @@ export default async function CoursePlayerPage({
       contentType: m.content_type,
       contentUrls: urls,
       contentBody: m.content_body,
-      instructions: m.assignments?.[0]?.instructions ?? null,
+      instructions: firstInstructions(m.assignments),
       status: (p?.status ?? "not_started") as ModuleProgressStatus,
       rejectionNote: p?.rejection_note ?? null,
       locked,

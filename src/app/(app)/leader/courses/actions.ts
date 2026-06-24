@@ -105,9 +105,10 @@ export async function addModule(input: {
   if (error) throw new Error(error.message);
 
   if (input.instructions.trim()) {
-    await supabase
+    const { error: aErr } = await supabase
       .from("assignments")
       .insert({ module_id: mod.id, instructions: input.instructions });
+    if (aErr) throw new Error(aErr.message);
   }
   revalidatePath(`/leader/courses/${input.courseId}`);
 }
@@ -135,13 +136,19 @@ export async function updateModule(input: {
     .eq("id", input.moduleId);
   if (error) throw new Error(error.message);
 
-  // One assignment per module — upsert on the unique module_id.
-  await supabase
-    .from("assignments")
-    .upsert(
-      { module_id: input.moduleId, instructions: input.instructions },
-      { onConflict: "module_id" }
-    );
+  // One assignment per module. Remove it when cleared; otherwise upsert on the
+  // unique module_id.
+  if (input.instructions.trim()) {
+    const { error: aErr } = await supabase
+      .from("assignments")
+      .upsert(
+        { module_id: input.moduleId, instructions: input.instructions },
+        { onConflict: "module_id" }
+      );
+    if (aErr) throw new Error(aErr.message);
+  } else {
+    await supabase.from("assignments").delete().eq("module_id", input.moduleId);
+  }
   revalidatePath(`/leader/courses/${input.courseId}`);
 }
 

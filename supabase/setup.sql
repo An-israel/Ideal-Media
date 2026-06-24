@@ -683,3 +683,7 @@ do $$ begin
     public.has_role('secretary') or public.is_super_admin()
   );
 exception when duplicate_object then null; end $$;
+
+
+-- Welfare follow-ups can also be opened for members marked inactive.
+alter type welfare_reason add value if not exists 'inactive';

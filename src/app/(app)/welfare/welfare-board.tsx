@@ -32,6 +32,7 @@ const REASON_LABEL: Record<WelfareReason, string> = {
   new_member: "New member",
   missed_service: "Missed service",
   traveled: "Traveled",
+  inactive: "Inactive",
 };
 const STATUSES: WelfareStatus[] = ["pending", "in_progress", "contacted", "resolved"];
 
@@ -61,6 +62,7 @@ export function WelfareBoard({
     new_member: items.filter((i) => i.reason === "new_member").length,
     missed_service: items.filter((i) => i.reason === "missed_service").length,
     traveled: items.filter((i) => i.reason === "traveled").length,
+    inactive: items.filter((i) => i.reason === "inactive").length,
   };
 
   return (
@@ -73,6 +75,7 @@ export function WelfareBoard({
           { value: "new_member", label: "New members", count: counts.new_member },
           { value: "missed_service", label: "Missed service", count: counts.missed_service },
           { value: "traveled", label: "Traveled", count: counts.traveled },
+          { value: "inactive", label: "Inactive", count: counts.inactive },
         ]}
       />
 
