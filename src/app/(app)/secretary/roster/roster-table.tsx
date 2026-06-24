@@ -2,14 +2,22 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { UserPlus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toaster";
 import { MEMBER_STATUSES } from "@/lib/constants";
-import { setMemberStatus } from "./actions";
+import {
+  setMemberStatus,
+  addMemberToRoster,
+  removeMembers,
+  assignSubunit,
+} from "./actions";
 import type { MemberStatus } from "@/lib/database.types";
 
 export type RosterRow = {
@@ -26,6 +34,7 @@ const ORIGIN_LABEL: Record<string, string> = {
   self_signup: "Joined",
   import: "Imported",
   welfare: "By welfare",
+  secretary: "By secretary",
 };
 
 const STATUS_VARIANT: Record<MemberStatus, "success" | "neutral" | "warning" | "danger"> = {
@@ -36,13 +45,29 @@ const STATUS_VARIANT: Record<MemberStatus, "success" | "neutral" | "warning" | "
   left: "danger",
 };
 
-export function RosterTable({ rows }: { rows: RosterRow[] }) {
+export function RosterTable({
+  rows,
+  subunits,
+}: {
+  rows: RosterRow[];
+  subunits: { id: string; name: string }[];
+}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<MemberStatus>("active");
+  const [bulkSubunit, setBulkSubunit] = useState<string>(subunits[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
+
+  const [adding, setAdding] = useState(false);
+  const [addForm, setAddForm] = useState({
+    fullName: "",
+    whatsappNumber: "",
+    phone: "",
+    email: "",
+    primarySubunitId: subunits[0]?.id ?? "",
+  });
 
   const filtered = useMemo(
     () =>
@@ -69,7 +94,7 @@ export function RosterTable({ rows }: { rows: RosterRow[] }) {
     );
   }
 
-  async function applyBulk() {
+  async function applyBulkStatus() {
     if (selected.size === 0) return;
     setBusy(true);
     try {
@@ -83,6 +108,69 @@ export function RosterTable({ rows }: { rows: RosterRow[] }) {
       setBusy(false);
     }
   }
+
+  async function applyAssignSubunit() {
+    if (selected.size === 0 || !bulkSubunit) return;
+    setBusy(true);
+    try {
+      const res = await assignSubunit([...selected], bulkSubunit);
+      const name = subunits.find((s) => s.id === bulkSubunit)?.name ?? "subunit";
+      toast({
+        title: `Added ${res.added} member(s) to ${name}`,
+        description: res.skipped ? `${res.skipped} skipped (already there or at the 4-subunit limit).` : undefined,
+        variant: "success",
+      });
+      setSelected(new Set());
+      router.refresh();
+    } catch (e) {
+      toast({ title: "Could not assign", description: String(e), variant: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyRemove() {
+    if (selected.size === 0) return;
+    if (
+      !window.confirm(
+        `Permanently remove ${selected.size} member(s)? This deletes their record, login, and history and cannot be undone.`
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      await removeMembers([...selected]);
+      toast({ title: `Removed ${selected.size} member(s)`, variant: "success" });
+      setSelected(new Set());
+      router.refresh();
+    } catch (e) {
+      toast({ title: "Could not remove", description: String(e), variant: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitAdd() {
+    if (!addForm.fullName.trim() || !addForm.primarySubunitId) {
+      toast({ title: "Name and subunit are required", variant: "error" });
+      return;
+    }
+    setBusy(true);
+    try {
+      await addMemberToRoster(addForm);
+      toast({ title: "Member added to the roster", variant: "success" });
+      setAdding(false);
+      setAddForm({ fullName: "", whatsappNumber: "", phone: "", email: "", primarySubunitId: subunits[0]?.id ?? "" });
+      router.refresh();
+    } catch (e) {
+      toast({ title: "Could not add member", description: String(e), variant: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const setAdd = (k: keyof typeof addForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setAddForm((f) => ({ ...f, [k]: e.target.value }));
 
   return (
     <div className="space-y-4">
@@ -101,16 +189,21 @@ export function RosterTable({ rows }: { rows: RosterRow[] }) {
             </option>
           ))}
         </Select>
+        <Button className="ml-auto" onClick={() => setAdding(true)}>
+          <UserPlus className="h-4 w-4" />
+          Add member
+        </Button>
       </div>
 
       {selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[var(--accent)]/30 bg-[var(--accent)]/5 px-4 py-3">
           <span className="text-sm font-medium">{selected.size} selected</span>
-          <span className="text-sm text-[var(--text-muted)]">Set status to</span>
+
+          <span className="text-sm text-[var(--text-muted)]">Status</span>
           <Select
             value={bulkStatus}
             onChange={(e) => setBulkStatus(e.target.value as MemberStatus)}
-            className="h-9 w-40"
+            className="h-9 w-36"
           >
             {MEMBER_STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -118,8 +211,39 @@ export function RosterTable({ rows }: { rows: RosterRow[] }) {
               </option>
             ))}
           </Select>
-          <Button size="sm" onClick={applyBulk} disabled={busy}>
+          <Button size="sm" variant="secondary" onClick={applyBulkStatus} disabled={busy}>
             Apply
+          </Button>
+
+          {subunits.length > 0 && (
+            <>
+              <span className="ml-2 text-sm text-[var(--text-muted)]">Add to subunit</span>
+              <Select
+                value={bulkSubunit}
+                onChange={(e) => setBulkSubunit(e.target.value)}
+                className="h-9 w-44"
+              >
+                {subunits.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </Select>
+              <Button size="sm" variant="secondary" onClick={applyAssignSubunit} disabled={busy}>
+                Assign
+              </Button>
+            </>
+          )}
+
+          <Button
+            size="sm"
+            variant="ghost"
+            className="ml-auto text-[var(--danger)]"
+            onClick={applyRemove}
+            disabled={busy}
+          >
+            <Trash2 className="h-4 w-4" />
+            Remove
           </Button>
         </div>
       )}
@@ -171,6 +295,50 @@ export function RosterTable({ rows }: { rows: RosterRow[] }) {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={adding}
+        onClose={() => setAdding(false)}
+        title="Add a member"
+        description="Adds them to the roster. They claim the record when they sign up with a matching phone or email."
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Full name</Label>
+            <Input value={addForm.fullName} onChange={setAdd("fullName")} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>WhatsApp</Label>
+              <Input value={addForm.whatsappNumber} onChange={setAdd("whatsappNumber")} placeholder="+234…" />
+            </div>
+            <div className="space-y-2">
+              <Label>Phone</Label>
+              <Input value={addForm.phone} onChange={setAdd("phone")} />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Email (optional)</Label>
+            <Input type="email" value={addForm.email} onChange={setAdd("email")} />
+          </div>
+          <div className="space-y-2">
+            <Label>Primary subunit</Label>
+            <Select
+              value={addForm.primarySubunitId}
+              onChange={(e) => setAddForm((f) => ({ ...f, primarySubunitId: e.target.value }))}
+            >
+              {subunits.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <Button className="w-full" onClick={submitAdd} disabled={busy || !addForm.fullName.trim()}>
+            {busy ? "Adding…" : "Add member"}
+          </Button>
+        </div>
+      </Dialog>
     </div>
   );
 }

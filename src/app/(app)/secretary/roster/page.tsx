@@ -13,6 +13,12 @@ export default async function RosterPage() {
     .eq("membership_type", "primary")
     .order("user_id");
 
+  const { data: subunits } = await supabase
+    .from("subunits")
+    .select("id, name")
+    .eq("category", "primary")
+    .order("name");
+
   type Row = {
     user_id: string;
     profiles: {
@@ -86,7 +92,7 @@ export default async function RosterPage() {
         </Card>
       )}
 
-      <RosterTable rows={rows} />
+      <RosterTable rows={rows} subunits={subunits ?? []} />
     </div>
   );
 }
