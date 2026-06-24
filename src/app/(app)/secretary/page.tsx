@@ -1,5 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
-import { SecretaryWorkspace, type GridMember } from "./secretary-workspace";
+import { SecretaryWorkspace, type GridMember, type MonthGroup } from "./secretary-workspace";
+
+function monthLabel(period: string) {
+  const d = new Date(`${period}-01T00:00:00`);
+  return isNaN(d.getTime())
+    ? period
+    : d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+}
 
 export default async function SecretaryPage({
   searchParams,
@@ -16,11 +23,11 @@ export default async function SecretaryPage({
   const list = activities ?? [];
   const activityId = activity || list.find((a) => a.is_attendance_signal)?.id || list[0]?.id || "";
 
-  let dates: string[] = [];
+  let monthGroups: MonthGroup[] = [];
   const gridMembers: GridMember[] = [];
 
   if (activityId) {
-    const [{ data: members }, { data: records }] = await Promise.all([
+    const [{ data: members }, { data: records }, { data: summaryRows }] = await Promise.all([
       supabase
         .from("subunit_members")
         .select("user_id, profiles(full_name), subunits(name)")
@@ -31,9 +38,11 @@ export default async function SecretaryPage({
         .eq("activity_id", activityId)
         .order("service_date", { ascending: false })
         .limit(4000),
+      supabase.from("monthly_attendance_summary").select("user_id, period, count"),
     ]);
 
-    dates = [...new Set((records ?? []).map((r) => r.service_date))].slice(0, 14).reverse();
+    // Most recent 14 service dates, oldest-first for display.
+    const dates = [...new Set((records ?? []).map((r) => r.service_date))].slice(0, 14).reverse();
 
     const byUser = new Map<string, Record<string, string>>();
     for (const r of records ?? []) {
@@ -41,6 +50,27 @@ export default async function SecretaryPage({
       m[r.service_date] = r.status;
       byUser.set(r.user_id, m);
     }
+
+    // Historical monthly tallies (whole-team counts for past months).
+    const summaryByUser = new Map<string, Record<string, number>>();
+    const summaryPeriods = new Set<string>();
+    for (const s of summaryRows ?? []) {
+      summaryPeriods.add(s.period);
+      const m = summaryByUser.get(s.user_id) ?? {};
+      m[s.period] = s.count;
+      summaryByUser.set(s.user_id, m);
+    }
+
+    // Build chronological month groups: summary-only months first, then months
+    // with per-service date columns. Each group ends in an auto "Total".
+    const datePeriods = new Set(dates.map((d) => d.slice(0, 7)));
+    const allPeriods = [...new Set([...summaryPeriods, ...datePeriods])].sort();
+    monthGroups = allPeriods.map((period) => ({
+      key: period,
+      label: monthLabel(period),
+      dates: dates.filter((d) => d.slice(0, 7) === period),
+      summaryOnly: !datePeriods.has(period),
+    }));
 
     type Row = { user_id: string; profiles: { full_name: string } | null; subunits: { name: string } | null };
     const seen = new Set<string>();
@@ -55,6 +85,7 @@ export default async function SecretaryPage({
         name: m.profiles.full_name,
         subunit: m.subunits?.name ?? "",
         statuses,
+        summary: summaryByUser.get(m.user_id) ?? {},
         rate: counted.length ? Math.round((present / counted.length) * 100) : null,
       });
     }
@@ -65,7 +96,7 @@ export default async function SecretaryPage({
     <SecretaryWorkspace
       activities={list}
       activeActivityId={activityId}
-      dates={dates}
+      monthGroups={monthGroups}
       members={gridMembers}
     />
   );

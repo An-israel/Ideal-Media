@@ -91,6 +91,8 @@ export function ImportAttendanceForm({ activities }: { activities: { id: string;
               <p className="text-xs text-[var(--text-muted)]">
                 Column headers like “SUN 30/11” have no year — this is added. SUN columns →
                 Sunday Service, WED → Bible Study; others use the default activity.
+                Month-name columns (e.g. “MARCH”) are read as that month&apos;s attendance
+                count and saved as a monthly tally.
               </p>
             </div>
           )}
@@ -115,7 +117,8 @@ export function ImportAttendanceForm({ activities }: { activities: { id: string;
           <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4">
             <p className="flex items-center gap-2 text-sm font-medium text-[var(--success)]">
               <CheckCircle2 className="h-4 w-4" />
-              Imported {result.imported} record{result.imported === 1 ? "" : "s"}.
+              Imported {result.imported} record{result.imported === 1 ? "" : "s"}
+              {result.summaries ? ` and ${result.summaries} monthly tall${result.summaries === 1 ? "y" : "ies"}` : ""}.
             </p>
             {result.skipped.length > 0 && (
               <div>

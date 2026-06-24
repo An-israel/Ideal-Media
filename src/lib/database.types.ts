@@ -188,6 +188,13 @@ export type AttendanceRecord = {
   created_at: string;
 };
 
+export type MonthlyAttendanceSummary = {
+  user_id: string;
+  period: string; // 'YYYY-MM'
+  count: number;
+  created_at: string;
+};
+
 export type WelfareFollowup = {
   id: string;
   user_id: string;
@@ -269,6 +276,7 @@ export type Database = {
       activities: TableDef<Activity>;
       attendance_uploads: TableDef<AttendanceUpload>;
       attendance_records: TableDef<AttendanceRecord>;
+      monthly_attendance_summary: TableDef<MonthlyAttendanceSummary>;
       welfare_followups: TableDef<WelfareFollowup>;
       notifications: TableDef<Notification>;
       app_settings: TableDef<AppSetting>;

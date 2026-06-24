@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { getSessionRoles } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { readSheetRows, readSheetMatrix, normalizeStatus } from "@/lib/attendance-parser";
+import {
+  readSheetRows,
+  readBestRegisterMatrix,
+  monthFromHeader,
+  normalizeStatus,
+} from "@/lib/attendance-parser";
 import { fetchSheetAsBuffer } from "@/lib/google-sheets";
 import { mapAttendanceColumns, type AttendanceColumnMap } from "@/lib/import-mapper";
 import { recomputeMissedService } from "@/lib/welfare-automation";
@@ -46,6 +51,8 @@ function coerceDate(value: unknown): string | null {
 export interface AttendanceImportResult {
   imported: number;
   skipped: { row: number; reason: string }[];
+  /** Number of monthly tallies imported (e.g. "5 in March"). */
+  summaries?: number;
   /** Set when the whole import failed — friendly message. */
   error?: string;
 }
@@ -189,7 +196,7 @@ export async function importWideAttendance(formData: FormData): Promise<Attendan
       return { ...empty, error: "Upload a file or paste a Google Sheet link." };
     }
 
-    const matrix = readSheetMatrix(buffer);
+    const matrix = readBestRegisterMatrix(buffer);
     if (matrix.length < 2) return { ...empty, error: "That sheet looks empty." };
     const headers = matrix[0];
     const norm = (h: string) => h.trim().toLowerCase();
@@ -228,8 +235,22 @@ export async function importWideAttendance(formData: FormData): Promise<Attendan
         : defaultActivityId;
       dateCols.push({ c, iso, act });
     }
-    if (dateCols.length === 0) {
-      return { ...empty, error: "No dated service columns found (e.g. 'SUN 30/11'). Check the file/year." };
+
+    // Detect month-tally columns (e.g. "FEB.", "MARCH") — a per-month count of
+    // services attended, with no individual dates. Stored as a summary.
+    const monthCols: { c: number; period: string }[] = [];
+    for (let c = 0; c < headers.length; c++) {
+      if (c === nameIdx || c === phoneIdx) continue;
+      if (dateCols.some((dc) => dc.c === c)) continue;
+      const mo = monthFromHeader(headers[c]);
+      if (mo) monthCols.push({ c, period: `${year}-${String(mo).padStart(2, "0")}` });
+    }
+
+    if (dateCols.length === 0 && monthCols.length === 0) {
+      return {
+        ...empty,
+        error: "No dated service columns (e.g. 'SUN 30/11') or month tallies (e.g. 'MARCH') found. Check the file/year.",
+      };
     }
 
     const { data: profiles } = await admin.from("profiles").select("id, full_name, phone, whatsapp_number");
@@ -250,6 +271,7 @@ export async function importWideAttendance(formData: FormData): Promise<Attendan
       status: AttendanceStatus;
       source: "manual";
     }[] = [];
+    const summaries: { user_id: string; period: string; count: number }[] = [];
     const result: AttendanceImportResult = { imported: 0, skipped: [] };
 
     for (let r = 1; r < matrix.length; r++) {
@@ -267,6 +289,15 @@ export async function importWideAttendance(formData: FormData): Promise<Attendan
         const status: AttendanceStatus = presentMarks.includes(cell) ? "present" : "absent";
         records.push({ user_id: userId, activity_id: dc.act, service_date: dc.iso, status, source: "manual" });
       }
+      for (const mc of monthCols) {
+        const raw = String(row[mc.c] ?? "").trim();
+        if (raw === "") continue;
+        const n = Number(raw.replace(/[^\d.]/g, ""));
+        // A month tally is a small count. Larger values are corrupted (e.g. an
+        // Excel date serial like 46086) — skip them rather than import garbage.
+        if (!Number.isFinite(n) || n < 0 || n > 40) continue;
+        summaries.push({ user_id: userId, period: mc.period, count: Math.round(n) });
+      }
     }
 
     if (records.length) {
@@ -279,6 +310,16 @@ export async function importWideAttendance(formData: FormData): Promise<Attendan
       }
       result.imported = records.length;
       if (sundayId) await recomputeMissedService(sundayId);
+    }
+
+    if (summaries.length) {
+      for (let i = 0; i < summaries.length; i += 1000) {
+        const { error } = await admin
+          .from("monthly_attendance_summary")
+          .upsert(summaries.slice(i, i + 1000), { onConflict: "user_id,period" });
+        if (error) return { ...result, error: error.message };
+      }
+      result.summaries = summaries.length;
     }
 
     revalidatePath("/secretary");

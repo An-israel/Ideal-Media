@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Upload, UploadCloud, CalendarClock, Users } from "lucide-react";
@@ -15,7 +15,17 @@ export type GridMember = {
   name: string;
   subunit: string;
   statuses: Record<string, string>;
+  /** Historical monthly tallies, keyed by 'YYYY-MM'. */
+  summary: Record<string, number>;
   rate: number | null;
+};
+
+export type MonthGroup = {
+  key: string; // 'YYYY-MM'
+  label: string;
+  dates: string[];
+  /** True when only a monthly tally is known (no individual service dates). */
+  summaryOnly: boolean;
 };
 
 type Activity = { id: string; name: string };
@@ -32,15 +42,22 @@ function shortDate(iso: string) {
   return isNaN(d.getTime()) ? iso : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+/** Times present in a month: from per-service marks if we have them, else the
+ * historical monthly tally. */
+function monthTotal(m: GridMember, g: MonthGroup): number {
+  if (g.dates.length > 0) return g.dates.filter((d) => m.statuses[d] === "present").length;
+  return m.summary[g.key] ?? 0;
+}
+
 export function SecretaryWorkspace({
   activities,
   activeActivityId,
-  dates,
+  monthGroups,
   members,
 }: {
   activities: Activity[];
   activeActivityId: string;
-  dates: string[];
+  monthGroups: MonthGroup[];
   members: GridMember[];
 }) {
   const router = useRouter();
@@ -49,6 +66,10 @@ export function SecretaryWorkspace({
     () => members.filter((m) => m.name.toLowerCase().includes(query.toLowerCase())),
     [members, query]
   );
+  const hasColumns = monthGroups.length > 0;
+  // Total columns + per-date columns, for the empty-state colspan.
+  const colCount =
+    2 + monthGroups.reduce((n, g) => n + g.dates.length + 1, 0);
 
   return (
     <div className="space-y-5">
@@ -104,7 +125,7 @@ export function SecretaryWorkspace({
         />
       </div>
 
-      {dates.length === 0 && members.length > 0 && (
+      {!hasColumns && members.length > 0 && (
         <p className="text-sm text-[var(--text-muted)]">
           Showing your <b>{members.length}</b> members. No attendance recorded for this
           register yet — use <b>Upload attendance</b> or <b>Import past attendance</b> and
@@ -122,18 +143,39 @@ export function SecretaryWorkspace({
           ) : (
             <table className="w-full border-collapse text-sm">
               <thead>
+                {/* Month band over each group's date columns + total. */}
+                <tr className="bg-[var(--bg)] text-xs text-[var(--text-muted)]">
+                  <th className="sticky left-0 z-10 border border-[var(--border)] bg-[var(--bg)] px-4 py-1.5" />
+                  <th className="border border-[var(--border)] px-3 py-1.5" />
+                  {monthGroups.map((g) => (
+                    <th
+                      key={g.key}
+                      colSpan={g.dates.length + 1}
+                      className="border border-[var(--border)] px-3 py-1.5 text-center font-semibold whitespace-nowrap"
+                    >
+                      {g.label}
+                    </th>
+                  ))}
+                </tr>
                 <tr className="bg-[var(--bg)] text-xs text-[var(--text-muted)]">
                   <th className="sticky left-0 z-10 border border-[var(--border)] bg-[var(--bg)] px-4 py-2.5 text-left font-medium">
                     Member
                   </th>
                   <th className="border border-[var(--border)] px-3 py-2.5 text-center font-medium">Rate</th>
-                  {dates.map((d) => (
-                    <th
-                      key={d}
-                      className="border border-[var(--border)] px-3 py-2.5 text-center font-medium whitespace-nowrap"
-                    >
-                      {shortDate(d)}
-                    </th>
+                  {monthGroups.map((g) => (
+                    <Fragment key={g.key}>
+                      {g.dates.map((d) => (
+                        <th
+                          key={d}
+                          className="border border-[var(--border)] px-3 py-2.5 text-center font-medium whitespace-nowrap"
+                        >
+                          {shortDate(d)}
+                        </th>
+                      ))}
+                      <th className="border border-[var(--border)] bg-[var(--accent)]/5 px-3 py-2.5 text-center font-semibold whitespace-nowrap">
+                        Total
+                      </th>
+                    </Fragment>
                   ))}
                 </tr>
               </thead>
@@ -149,31 +191,38 @@ export function SecretaryWorkspace({
                     <td className="border border-[var(--border)] px-3 py-2 text-center text-[var(--text-muted)]">
                       {m.rate == null ? "—" : `${m.rate}%`}
                     </td>
-                    {dates.map((d) => {
-                      const st = m.statuses[d];
-                      const mark = st ? MARK[st] : null;
-                      return (
-                        <td key={d} className="border border-[var(--border)] px-3 py-2 text-center">
-                          {mark ? (
-                            <span
-                              className={cn(
-                                "inline-flex h-6 w-6 items-center justify-center rounded text-xs font-semibold",
-                                mark.className
+                    {monthGroups.map((g) => (
+                      <Fragment key={g.key}>
+                        {g.dates.map((d) => {
+                          const st = m.statuses[d];
+                          const mark = st ? MARK[st] : null;
+                          return (
+                            <td key={d} className="border border-[var(--border)] px-3 py-2 text-center">
+                              {mark ? (
+                                <span
+                                  className={cn(
+                                    "inline-flex h-6 w-6 items-center justify-center rounded text-xs font-semibold",
+                                    mark.className
+                                  )}
+                                >
+                                  {mark.label}
+                                </span>
+                              ) : (
+                                <span className="text-[var(--border)]">·</span>
                               )}
-                            >
-                              {mark.label}
-                            </span>
-                          ) : (
-                            <span className="text-[var(--border)]">·</span>
-                          )}
+                            </td>
+                          );
+                        })}
+                        <td className="border border-[var(--border)] bg-[var(--accent)]/5 px-3 py-2 text-center font-semibold">
+                          {monthTotal(m, g)}
                         </td>
-                      );
-                    })}
+                      </Fragment>
+                    ))}
                   </tr>
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={dates.length + 2} className="px-5 py-10 text-center text-sm text-[var(--text-muted)]">
+                    <td colSpan={colCount} className="px-5 py-10 text-center text-sm text-[var(--text-muted)]">
                       No members match.
                     </td>
                   </tr>
@@ -185,7 +234,8 @@ export function SecretaryWorkspace({
       </Card>
 
       <p className="text-xs text-[var(--text-muted)]">
-        P = present · A = absent · T = traveled · E = excused · · = no record
+        P = present · A = absent · T = traveled · E = excused · · = no record ·
+        <b> Total</b> = times present that month (auto-calculated)
       </p>
     </div>
   );

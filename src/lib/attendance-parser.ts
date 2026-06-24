@@ -39,6 +39,55 @@ export function readSheetMatrix(buffer: Buffer): string[][] {
   return (aoa as unknown[][]).map((row) => row.map((c) => String(c ?? "")));
 }
 
+const MONTH_RE = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i;
+const DAYNUM_RE = /(\d{1,2})\s*[/.\-]\s*(\d{1,2})/;
+
+/**
+ * Scans EVERY sheet in a workbook and returns the one that looks most like an
+ * attendance register — a header row containing a Name column plus the most
+ * dated/month columns — trimmed so row 0 is that header. Handles real-world
+ * files with a blank leading row, a leading index column, and the register on
+ * a sheet other than the first. Falls back to the first sheet's matrix.
+ */
+export function readBestRegisterMatrix(buffer: Buffer): string[][] {
+  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
+  let best: { matrix: string[][]; score: number } | null = null;
+
+  for (const sheetName of wb.SheetNames) {
+    const ws = wb.Sheets[sheetName];
+    if (!ws) continue;
+    const aoa = (XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" }) as unknown[][]).map(
+      (row) => row.map((c) => String(c ?? ""))
+    );
+
+    // Find a header row in the first several rows: has a Name column and at
+    // least one dated or month column.
+    for (let h = 0; h < Math.min(aoa.length, 8); h++) {
+      const row = aoa[h];
+      const hasName = row.some((c) => /name/i.test(c) && !/phone/i.test(c));
+      if (!hasName) continue;
+      const dated = row.filter((c) => DAYNUM_RE.test(c) || (MONTH_RE.test(c) && !/name|phone|subunit/i.test(c))).length;
+      if (dated === 0) continue;
+      if (!best || dated > best.score) {
+        best = { matrix: aoa.slice(h), score: dated };
+      }
+    }
+  }
+
+  if (best) return best.matrix;
+  // Fall back to the first sheet, whole matrix.
+  return readSheetMatrix(buffer);
+}
+
+/** Maps a header like "FEB.", "MARCH", "May" to a month number (1-12), or null. */
+export function monthFromHeader(header: string): number | null {
+  if (DAYNUM_RE.test(header)) return null; // dated column, not a month tally
+  const m = header.match(MONTH_RE);
+  if (!m) return null;
+  const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  return months.indexOf(m[1].toLowerCase()) + 1;
+}
+
 // Single tool whose input_schema is the exact JSON shape we want back. Forcing
 // this tool (tool_choice) gives strict, parseable JSON instead of prose.
 const PROPOSAL_TOOL: Anthropic.Tool = {
