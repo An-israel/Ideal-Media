@@ -74,7 +74,7 @@ export async function addModule(input: {
   courseId: string;
   title: string;
   contentType: ContentType;
-  contentUrl: string;
+  contentUrls: string[];
   contentBody: string;
   instructions: string;
 }) {
@@ -88,6 +88,7 @@ export async function addModule(input: {
     .maybeSingle();
   const position = (last?.position ?? 0) + 1;
 
+  const urls = input.contentUrls.map((u) => u.trim()).filter(Boolean);
   const { data: mod, error } = await supabase
     .from("modules")
     .insert({
@@ -95,7 +96,8 @@ export async function addModule(input: {
       position,
       title: input.title,
       content_type: input.contentType,
-      content_url: input.contentUrl || null,
+      content_url: urls[0] || null,
+      content_urls: urls,
       content_body: input.contentBody || null,
     })
     .select("id")
@@ -115,17 +117,19 @@ export async function updateModule(input: {
   courseId: string;
   title: string;
   contentType: ContentType;
-  contentUrl: string;
+  contentUrls: string[];
   contentBody: string;
   instructions: string;
 }) {
   const supabase = await createClient();
+  const urls = input.contentUrls.map((u) => u.trim()).filter(Boolean);
   const { error } = await supabase
     .from("modules")
     .update({
       title: input.title,
       content_type: input.contentType,
-      content_url: input.contentUrl || null,
+      content_url: urls[0] || null,
+      content_urls: urls,
       content_body: input.contentBody || null,
     })
     .eq("id", input.moduleId);

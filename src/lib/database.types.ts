@@ -92,6 +92,7 @@ export type Module = {
   title: string;
   content_type: ContentType;
   content_url: string | null;
+  content_urls: string[];
   content_body: string | null;
   created_at: string;
 };

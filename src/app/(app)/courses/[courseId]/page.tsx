@@ -33,7 +33,7 @@ export default async function CoursePlayerPage({
   const [{ data: modules }, { data: progress }] = await Promise.all([
     supabase
       .from("modules")
-      .select("id, position, title, content_type, content_url, content_body, assignments(instructions)")
+      .select("id, position, title, content_type, content_url, content_urls, content_body, assignments(instructions)")
       .eq("course_id", courseId)
       .order("position", { ascending: true }),
     supabase
@@ -67,6 +67,7 @@ export default async function CoursePlayerPage({
     title: string;
     content_type: ContentType;
     content_url: string | null;
+    content_urls: string[] | null;
     content_body: string | null;
     assignments: { instructions: string }[];
   };
@@ -77,12 +78,17 @@ export default async function CoursePlayerPage({
     const prevStatus = prev ? progressMap.get(prev.id)?.status : undefined;
     const locked = i > 0 && prevStatus !== "approved";
     const p = progressMap.get(m.id);
+    const urls = m.content_urls && m.content_urls.length > 0
+      ? m.content_urls
+      : m.content_url
+        ? [m.content_url]
+        : [];
     return {
       id: m.id,
       position: m.position,
       title: m.title,
       contentType: m.content_type,
-      contentUrl: m.content_url,
+      contentUrls: urls,
       contentBody: m.content_body,
       instructions: m.assignments?.[0]?.instructions ?? null,
       status: (p?.status ?? "not_started") as ModuleProgressStatus,

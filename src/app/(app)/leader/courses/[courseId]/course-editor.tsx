@@ -36,7 +36,7 @@ export type EditorModule = {
   position: number;
   title: string;
   content_type: ContentType;
-  content_url: string;
+  content_urls: string[];
   content_body: string;
   instructions: string;
 };
@@ -47,7 +47,7 @@ type ModuleDraft = Omit<EditorModule, "id" | "position">;
 const emptyDraft: ModuleDraft = {
   title: "",
   content_type: "article",
-  content_url: "",
+  content_urls: [""],
   content_body: "",
   instructions: "",
 };
@@ -103,7 +103,14 @@ export function CourseEditor({
     if (!draft.title.trim()) return;
     setBusy(true);
     try {
-      await addModule({ courseId, ...draft, contentType: draft.content_type, contentUrl: draft.content_url, contentBody: draft.content_body });
+      await addModule({
+        courseId,
+        title: draft.title,
+        contentType: draft.content_type,
+        contentUrls: draft.content_urls,
+        contentBody: draft.content_body,
+        instructions: draft.instructions,
+      });
       setAdding(false);
       setDraft(emptyDraft);
       router.refresh();
@@ -123,7 +130,7 @@ export function CourseEditor({
         courseId,
         title: editing.title,
         contentType: editing.content_type,
-        contentUrl: editing.content_url,
+        contentUrls: editing.content_urls,
         contentBody: editing.content_body,
         instructions: editing.instructions,
       });
@@ -294,28 +301,63 @@ function ModuleFields({
         <Label>Title</Label>
         <Input value={value.title} onChange={(e) => onChange({ ...value, title: e.target.value })} />
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label>Content type</Label>
-          <Select
-            value={value.content_type}
-            onChange={(e) => onChange({ ...value, content_type: e.target.value as ContentType })}
-          >
-            {CONTENT_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label>Content URL</Label>
-          <Input
-            value={value.content_url}
-            onChange={(e) => onChange({ ...value, content_url: e.target.value })}
-            placeholder="https://…"
-          />
-        </div>
+      <div className="space-y-2">
+        <Label>Content type</Label>
+        <Select
+          value={value.content_type}
+          onChange={(e) => onChange({ ...value, content_type: e.target.value as ContentType })}
+        >
+          {CONTENT_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>
+          {value.content_type === "youtube" ? "YouTube links" : "Content links"}
+        </Label>
+        <p className="text-xs text-[var(--text-muted)]">
+          Add one or more links. They&apos;ll appear in order for members.
+        </p>
+        {value.content_urls.map((url, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <Input
+              value={url}
+              onChange={(e) => {
+                const next = [...value.content_urls];
+                next[i] = e.target.value;
+                onChange({ ...value, content_urls: next });
+              }}
+              placeholder="https://…"
+            />
+            {value.content_urls.length > 1 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() =>
+                  onChange({
+                    ...value,
+                    content_urls: value.content_urls.filter((_, j) => j !== i),
+                  })
+                }
+              >
+                <Trash2 className="h-4 w-4 text-[var(--danger)]" />
+              </Button>
+            )}
+          </div>
+        ))}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange({ ...value, content_urls: [...value.content_urls, ""] })}
+        >
+          <Plus className="h-4 w-4" />
+          Add another link
+        </Button>
       </div>
       <div className="space-y-2">
         <Label>Inline content (optional)</Label>

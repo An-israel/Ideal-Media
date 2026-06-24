@@ -19,7 +19,7 @@ export default async function EditCoursePage({
 
   const { data: modules } = await supabase
     .from("modules")
-    .select("id, position, title, content_type, content_url, content_body, assignments(instructions)")
+    .select("id, position, title, content_type, content_url, content_urls, content_body, assignments(instructions)")
     .eq("course_id", courseId)
     .order("position", { ascending: true });
 
@@ -29,18 +29,26 @@ export default async function EditCoursePage({
     title: string;
     content_type: EditorModule["content_type"];
     content_url: string | null;
+    content_urls: string[] | null;
     content_body: string | null;
     assignments: { instructions: string }[];
   };
-  const editorModules: EditorModule[] = ((modules ?? []) as unknown as Row[]).map((m) => ({
-    id: m.id,
-    position: m.position,
-    title: m.title,
-    content_type: m.content_type,
-    content_url: m.content_url ?? "",
-    content_body: m.content_body ?? "",
-    instructions: m.assignments?.[0]?.instructions ?? "",
-  }));
+  const editorModules: EditorModule[] = ((modules ?? []) as unknown as Row[]).map((m) => {
+    const urls = m.content_urls && m.content_urls.length > 0
+      ? m.content_urls
+      : m.content_url
+        ? [m.content_url]
+        : [];
+    return {
+      id: m.id,
+      position: m.position,
+      title: m.title,
+      content_type: m.content_type,
+      content_urls: urls.length > 0 ? urls : [""],
+      content_body: m.content_body ?? "",
+      instructions: m.assignments?.[0]?.instructions ?? "",
+    };
+  });
 
   return (
     <CourseEditor

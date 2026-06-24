@@ -648,3 +648,9 @@ update profiles set member_origin = 'import' where claimed = false and member_or
 -- upcoming-birthday panel and the on-the-day reminder.
 alter table profiles add column if not exists birth_month smallint;
 alter table profiles add column if not exists birth_day smallint;
+
+
+-- Allow multiple content links per module (e.g. several YouTube videos).
+-- content_url stays as the first/primary link for backward compatibility;
+-- content_urls holds the full list.
+alter table modules add column if not exists content_urls jsonb not null default '[]';

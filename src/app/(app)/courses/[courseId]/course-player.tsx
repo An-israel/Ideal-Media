@@ -24,7 +24,7 @@ export type PlayerModule = {
   position: number;
   title: string;
   contentType: ContentType;
-  contentUrl: string | null;
+  contentUrls: string[];
   contentBody: string | null;
   instructions: string | null;
   status: ModuleProgressStatus;
@@ -168,50 +168,78 @@ export function CoursePlayer({ modules }: { modules: PlayerModule[] }) {
 }
 
 function ContentBlock({ module: m }: { module: PlayerModule }) {
-  if (m.contentType === "youtube" && m.contentUrl) {
-    const embed = youtubeEmbed(m.contentUrl);
-    if (embed) {
+  const urls = m.contentUrls.filter(Boolean);
+
+  // YouTube: embed every link that resolves to a video; fall back to a link.
+  if (m.contentType === "youtube" && urls.length > 0) {
+    const embeds = urls.map((u) => ({ url: u, embed: youtubeEmbed(u) }));
+    if (embeds.some((e) => e.embed)) {
       return (
-        <div className="aspect-video overflow-hidden rounded-2xl border border-[var(--border)]">
-          <iframe
-            src={embed}
-            className="h-full w-full"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
+        <div className="space-y-4">
+          {embeds.map((e, i) =>
+            e.embed ? (
+              <div
+                key={i}
+                className="aspect-video overflow-hidden rounded-2xl border border-[var(--border)]"
+              >
+                <iframe
+                  src={e.embed}
+                  className="h-full w-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            ) : (
+              <a key={i} href={e.url} target="_blank" rel="noopener noreferrer">
+                <Button variant="outline">
+                  <ExternalLink className="h-4 w-4" /> Open video {i + 1}
+                </Button>
+              </a>
+            )
+          )}
         </div>
       );
     }
   }
 
-  if (m.contentType === "video" && m.contentUrl) {
+  if (m.contentType === "video" && urls.length > 0) {
     return (
-      <video controls className="w-full rounded-2xl border border-[var(--border)]">
-        <source src={m.contentUrl} />
-      </video>
+      <div className="space-y-4">
+        {urls.map((u, i) => (
+          <video key={i} controls className="w-full rounded-2xl border border-[var(--border)]">
+            <source src={u} />
+          </video>
+        ))}
+      </div>
     );
   }
 
   return (
     <Card>
       <CardContent className="space-y-3 pt-6">
-        {m.contentUrl && (
-          <a href={m.contentUrl} target="_blank" rel="noopener noreferrer">
-            <Button variant="outline">
-              {m.contentType === "file" ? (
-                <>
-                  <Download className="h-4 w-4" /> Download / open
-                </>
-              ) : (
-                <>
-                  <ExternalLink className="h-4 w-4" /> Open content
-                </>
-              )}
-            </Button>
-          </a>
+        {urls.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {urls.map((u, i) => (
+              <a key={i} href={u} target="_blank" rel="noopener noreferrer">
+                <Button variant="outline">
+                  {m.contentType === "file" ? (
+                    <>
+                      <Download className="h-4 w-4" />{" "}
+                      {urls.length > 1 ? `Download ${i + 1}` : "Download / open"}
+                    </>
+                  ) : (
+                    <>
+                      <ExternalLink className="h-4 w-4" />{" "}
+                      {urls.length > 1 ? `Open ${i + 1}` : "Open content"}
+                    </>
+                  )}
+                </Button>
+              </a>
+            ))}
+          </div>
         )}
         {m.contentBody && <p className="whitespace-pre-wrap text-sm leading-relaxed">{m.contentBody}</p>}
-        {!m.contentUrl && !m.contentBody && (
+        {urls.length === 0 && !m.contentBody && (
           <p className="text-sm text-[var(--text-muted)]">No content provided for this module.</p>
         )}
       </CardContent>
