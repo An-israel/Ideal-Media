@@ -35,7 +35,10 @@ export function ApprovalsClient({
   applications: ApplicationItem[];
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState("submissions");
+  // Open on whichever queue actually has items so a non-empty tab isn't hidden.
+  const [tab, setTab] = useState(
+    submissions.length === 0 && applications.length > 0 ? "applications" : "submissions"
+  );
   const [busy, setBusy] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<SubmissionItem | null>(null);
   const [note, setNote] = useState("");
