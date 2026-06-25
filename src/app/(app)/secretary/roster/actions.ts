@@ -233,3 +233,64 @@ export async function assignSubunit(userIds: string[], subunitId: string) {
   revalidatePath("/secretary");
   return { added: toInsert.length, skipped };
 }
+
+/**
+ * Moves selected members to a different PRIMARY subunit (the one shown on the
+ * roster). If they already belong to the target subunit it's promoted to
+ * primary; their old primary becomes a secondary membership.
+ */
+export async function moveToSubunit(userIds: string[], subunitId: string) {
+  await requireSecretary();
+  if (userIds.length === 0 || !subunitId) return { moved: 0, skipped: 0 };
+
+  const admin = createAdminClient();
+  const { data: existing } = await admin
+    .from("subunit_members")
+    .select("id, user_id, subunit_id, membership_type")
+    .in("user_id", userIds);
+
+  const byUser = new Map<
+    string,
+    { id: string; subunit_id: string; membership_type: string }[]
+  >();
+  for (const m of existing ?? []) {
+    const list = byUser.get(m.user_id) ?? [];
+    list.push({ id: m.id, subunit_id: m.subunit_id, membership_type: m.membership_type });
+    byUser.set(m.user_id, list);
+  }
+
+  let moved = 0;
+  let skipped = 0;
+  for (const userId of userIds) {
+    const memberships = byUser.get(userId) ?? [];
+    const target = memberships.find((m) => m.subunit_id === subunitId);
+    const primary = memberships.find((m) => m.membership_type === "primary");
+
+    if (target) {
+      if (target.membership_type === "primary") {
+        skipped++; // already their primary subunit
+        continue;
+      }
+      // Promote the target to primary, demote the old primary to secondary.
+      await admin.from("subunit_members").update({ membership_type: "primary" }).eq("id", target.id);
+      if (primary) {
+        await admin.from("subunit_members").update({ membership_type: "secondary" }).eq("id", primary.id);
+      }
+      moved++;
+    } else if (primary) {
+      // Repoint their primary membership to the new subunit.
+      await admin.from("subunit_members").update({ subunit_id: subunitId }).eq("id", primary.id);
+      moved++;
+    } else {
+      // No memberships yet — create a primary one.
+      await admin
+        .from("subunit_members")
+        .insert({ user_id: userId, subunit_id: subunitId, membership_type: "primary" });
+      moved++;
+    }
+  }
+
+  revalidatePath("/secretary/roster");
+  revalidatePath("/secretary");
+  return { moved, skipped };
+}

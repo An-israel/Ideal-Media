@@ -17,6 +17,7 @@ import {
   addMemberToRoster,
   removeMembers,
   assignSubunit,
+  moveToSubunit,
 } from "./actions";
 import type { MemberStatus } from "@/lib/database.types";
 
@@ -129,6 +130,26 @@ export function RosterTable({
     }
   }
 
+  async function applyMoveSubunit() {
+    if (selected.size === 0 || !bulkSubunit) return;
+    setBusy(true);
+    try {
+      const res = await moveToSubunit([...selected], bulkSubunit);
+      const name = subunits.find((s) => s.id === bulkSubunit)?.name ?? "subunit";
+      toast({
+        title: `Moved ${res.moved} member(s) to ${name}`,
+        description: res.skipped ? `${res.skipped} already had ${name} as their main subunit.` : undefined,
+        variant: "success",
+      });
+      setSelected(new Set());
+      router.refresh();
+    } catch (e) {
+      toast({ title: "Could not move", description: String(e), variant: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function applyRemove() {
     if (selected.size === 0) return;
     if (
@@ -217,7 +238,7 @@ export function RosterTable({
 
           {subunits.length > 0 && (
             <>
-              <span className="ml-2 text-sm text-[var(--text-muted)]">Add to subunit</span>
+              <span className="ml-2 text-sm text-[var(--text-muted)]">Subunit</span>
               <Select
                 value={bulkSubunit}
                 onChange={(e) => setBulkSubunit(e.target.value)}
@@ -229,8 +250,11 @@ export function RosterTable({
                   </option>
                 ))}
               </Select>
-              <Button size="sm" variant="secondary" onClick={applyAssignSubunit} disabled={busy}>
-                Assign
+              <Button size="sm" variant="secondary" onClick={applyMoveSubunit} disabled={busy} title="Change their main subunit">
+                Move here
+              </Button>
+              <Button size="sm" variant="ghost" onClick={applyAssignSubunit} disabled={busy} title="Add as an extra subunit (keeps their main one)">
+                Add as extra
               </Button>
             </>
           )}
