@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionRoles } from "@/lib/auth";
 import { notify } from "@/lib/notify";
 
@@ -80,9 +81,36 @@ export async function decideApplication(enrollmentId: string, approve: boolean) 
       decided_at: new Date().toISOString(),
     })
     .eq("id", enrollmentId)
-    .select("user_id, course_id, courses(title)")
+    .select("user_id, course_id, courses(title, subunit_id)")
     .single();
   if (error) throw new Error(error.message);
+
+  // Approval = joining that unit: add a secondary membership so the member
+  // shows up in the subunit and keeps course access. Best-effort (skipped if
+  // they're already in it or at the 4-subunit cap).
+  if (approve) {
+    try {
+      const admin = createAdminClient();
+      // @ts-expect-error supabase embed typing
+      const subunitId: string | undefined = enrollment.courses?.subunit_id;
+      if (subunitId) {
+        const { data: memberships } = await admin
+          .from("subunit_members")
+          .select("subunit_id")
+          .eq("user_id", enrollment.user_id);
+        const already = (memberships ?? []).some((m) => m.subunit_id === subunitId);
+        if (!already && (memberships ?? []).length < 4) {
+          await admin.from("subunit_members").insert({
+            user_id: enrollment.user_id,
+            subunit_id: subunitId,
+            membership_type: "secondary",
+          });
+        }
+      }
+    } catch {
+      // Membership is a bonus — never block the approval on it.
+    }
+  }
 
   // @ts-expect-error supabase embed typing
   const courseTitle: string = enrollment.courses?.title ?? "the course";

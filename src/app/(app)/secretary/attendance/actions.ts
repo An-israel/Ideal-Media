@@ -10,6 +10,7 @@ import {
   type RosterMember,
 } from "@/lib/attendance-parser";
 import { recomputeMissedService } from "@/lib/welfare-automation";
+import { fetchAllPages } from "@/lib/fetch-all";
 import { ACCEPTED_UPLOAD_EXT, MAX_UPLOAD_BYTES } from "@/lib/constants";
 import type { AiProposal, AttendanceStatus } from "@/lib/database.types";
 
@@ -23,10 +24,14 @@ async function requireSecretary() {
 }
 
 async function buildRoster(admin: ReturnType<typeof createAdminClient>): Promise<RosterMember[]> {
-  const { data } = await admin
-    .from("subunit_members")
-    .select("user_id, profiles(full_name, member_status), subunits(name)")
-    .eq("membership_type", "primary");
+  // Paged past the 1000-row cap so the AI matches against the full roster.
+  const data = await fetchAllPages((from, to) =>
+    admin
+      .from("subunit_members")
+      .select("user_id, profiles(full_name, member_status), subunits(name)")
+      .eq("membership_type", "primary")
+      .range(from, to)
+  );
 
   type Row = {
     user_id: string;

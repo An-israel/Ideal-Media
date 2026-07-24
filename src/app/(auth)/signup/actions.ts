@@ -1,6 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllPages } from "@/lib/fetch-all";
 import type { Profile } from "@/lib/database.types";
 
 export interface SignupInput {
@@ -63,11 +64,12 @@ export async function signUpAction(input: SignupInput): Promise<SignupResult> {
   const last10 = (p: string) => p.replace(/\D/g, "").slice(-10);
   const phoneKey = last10(input.whatsappNumber || input.phone || "");
 
-  // Pull existing members and match by email, then by phone (in code, so phone
-  // formatting differences don't cause a miss → no accidental duplicate).
-  const { data: allProfiles } = await admin
-    .from("profiles")
-    .select("id, email, phone, whatsapp_number, claimed");
+  // Pull existing members (paged past the 1000-row cap) and match by email,
+  // then by phone (in code, so phone formatting differences don't cause a
+  // miss → no accidental duplicate).
+  const allProfiles = await fetchAllPages((from, to) =>
+    admin.from("profiles").select("id, email, phone, whatsapp_number, claimed").range(from, to)
+  );
 
   let match: { id: string; email: string; claimed: boolean } | null = null;
   for (const p of allProfiles ?? []) {

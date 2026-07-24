@@ -31,7 +31,12 @@ export async function setMemberStatus(userIds: string[], status: MemberStatus) {
 
   // Marking someone traveled/inactive opens a welfare follow-up and notifies
   // the welfare team so they know to check in. Returning to active resolves it.
-  await syncWelfareForStatus(userIds, status);
+  // Best-effort: the status change itself must never fail because of this.
+  try {
+    await syncWelfareForStatus(userIds, status);
+  } catch {
+    /* noop */
+  }
 
   revalidatePath("/secretary/roster");
   revalidatePath("/secretary");
@@ -42,21 +47,31 @@ async function syncWelfareForStatus(userIds: string[], status: MemberStatus) {
   const admin = createAdminClient();
 
   if (status === "traveled" || status === "inactive") {
-    const reason = status; // both are valid welfare_reason values
-    // Skip anyone who already has an open follow-up for this reason.
-    const { data: existing } = await admin
-      .from("welfare_followups")
-      .select("user_id")
-      .eq("reason", reason)
-      .neq("status", "resolved")
-      .in("user_id", userIds);
-    const alreadyOpen = new Set((existing ?? []).map((r) => r.user_id));
-    const toFlag = userIds.filter((id) => !alreadyOpen.has(id));
+    const reason = status;
+    // Try to open follow-ups on the welfare board. If the database doesn't
+    // know this reason yet (setup SQL not run), fall back to notifying about
+    // everyone — welfare must still hear about it either way.
+    let toFlag = userIds;
+    try {
+      const { data: existing, error: exErr } = await admin
+        .from("welfare_followups")
+        .select("user_id")
+        .eq("reason", reason)
+        .neq("status", "resolved")
+        .in("user_id", userIds);
+      if (exErr) throw new Error(exErr.message);
+      const alreadyOpen = new Set((existing ?? []).map((r) => r.user_id));
+      toFlag = userIds.filter((id) => !alreadyOpen.has(id));
+      if (toFlag.length > 0) {
+        const { error: insErr } = await admin
+          .from("welfare_followups")
+          .insert(toFlag.map((user_id) => ({ user_id, reason, auto_flagged: true })));
+        if (insErr) throw new Error(insErr.message);
+      }
+    } catch {
+      toFlag = userIds; // board entry failed — still notify the team
+    }
     if (toFlag.length === 0) return;
-
-    await admin
-      .from("welfare_followups")
-      .insert(toFlag.map((user_id) => ({ user_id, reason, auto_flagged: true })));
 
     // Notify the welfare team, naming who needs a follow-up.
     const { data: profs } = await admin
@@ -82,13 +97,17 @@ async function syncWelfareForStatus(userIds: string[], status: MemberStatus) {
     }
   } else if (status === "active") {
     // Returning members: close any auto-opened traveled/inactive follow-ups.
-    await admin
-      .from("welfare_followups")
-      .update({ status: "resolved" })
-      .in("user_id", userIds)
-      .in("reason", ["traveled", "inactive"])
-      .eq("auto_flagged", true)
-      .neq("status", "resolved");
+    try {
+      await admin
+        .from("welfare_followups")
+        .update({ status: "resolved" })
+        .in("user_id", userIds)
+        .in("reason", ["traveled", "inactive"])
+        .eq("auto_flagged", true)
+        .neq("status", "resolved");
+    } catch {
+      // Best-effort cleanup — never block the status change.
+    }
   }
 }
 

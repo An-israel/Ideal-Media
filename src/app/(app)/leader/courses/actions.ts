@@ -89,7 +89,7 @@ export async function addModule(input: {
   const position = (last?.position ?? 0) + 1;
 
   const urls = input.contentUrls.map((u) => u.trim()).filter(Boolean);
-  const { data: mod, error } = await supabase
+  let { data: mod, error } = await supabase
     .from("modules")
     .insert({
       course_id: input.courseId,
@@ -102,7 +102,24 @@ export async function addModule(input: {
     })
     .select("id")
     .single();
+  // Retry without content_urls if that column's migration isn't run yet —
+  // adding a module must never fail because of an optional feature.
+  if (error && /content_urls/i.test(error.message)) {
+    ({ data: mod, error } = await supabase
+      .from("modules")
+      .insert({
+        course_id: input.courseId,
+        position,
+        title: input.title,
+        content_type: input.contentType,
+        content_url: urls[0] || null,
+        content_body: input.contentBody || null,
+      })
+      .select("id")
+      .single());
+  }
   if (error) throw new Error(error.message);
+  if (!mod) throw new Error("Could not add module.");
 
   if (input.instructions.trim()) {
     const { error: aErr } = await supabase
@@ -124,7 +141,7 @@ export async function updateModule(input: {
 }) {
   const supabase = await createClient();
   const urls = input.contentUrls.map((u) => u.trim()).filter(Boolean);
-  const { error } = await supabase
+  let { error } = await supabase
     .from("modules")
     .update({
       title: input.title,
@@ -134,6 +151,18 @@ export async function updateModule(input: {
       content_body: input.contentBody || null,
     })
     .eq("id", input.moduleId);
+  // Retry without content_urls if that column's migration isn't run yet.
+  if (error && /content_urls/i.test(error.message)) {
+    ({ error } = await supabase
+      .from("modules")
+      .update({
+        title: input.title,
+        content_type: input.contentType,
+        content_url: urls[0] || null,
+        content_body: input.contentBody || null,
+      })
+      .eq("id", input.moduleId));
+  }
   if (error) throw new Error(error.message);
 
   // One assignment per module. Remove it when cleared; otherwise upsert on the

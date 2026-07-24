@@ -12,6 +12,7 @@ import {
 import { fetchSheetAsBuffer } from "@/lib/google-sheets";
 import { mapAttendanceColumns, type AttendanceColumnMap } from "@/lib/import-mapper";
 import { recomputeMissedService } from "@/lib/welfare-automation";
+import { fetchAllPages } from "@/lib/fetch-all";
 import { ACCEPTED_UPLOAD_EXT, MAX_UPLOAD_BYTES } from "@/lib/constants";
 import type { AttendanceStatus } from "@/lib/database.types";
 
@@ -53,6 +54,8 @@ export interface AttendanceImportResult {
   skipped: { row: number; reason: string }[];
   /** Number of monthly tallies imported (e.g. "5 in March"). */
   summaries?: number;
+  /** Partial-success note (e.g. tallies skipped) — import still worked. */
+  warning?: string;
   /** Set when the whole import failed — friendly message. */
   error?: string;
 }
@@ -91,7 +94,9 @@ export async function importPastAttendance(formData: FormData): Promise<Attendan
   const rows = readSheetRows(buffer);
   if (rows.length === 0) return { ...empty, error: "That sheet looks empty — check the link/file." };
 
-  const { data: profiles } = await admin.from("profiles").select("id, email, full_name");
+  const profiles = await fetchAllPages((from, to) =>
+    admin.from("profiles").select("id, email, full_name").range(from, to)
+  );
   const byEmail = new Map<string, string>();
   const byName = new Map<string, string>();
   for (const p of profiles ?? []) {
@@ -138,6 +143,21 @@ export async function importPastAttendance(formData: FormData): Promise<Attendan
 
     const status = normalizeStatus(String(pick(lookup, colMap?.status, ["status", "attendance", "present"])));
     records.push({ user_id: userId, activity_id: activityId, service_date: date, status, source: "manual" });
+  }
+
+  // Nothing usable + mostly unreadable dates → almost certainly a register
+  // layout (dates across the top), not one-row-per-record. Say so.
+  if (records.length === 0 && result.skipped.length > 0) {
+    const dateFails = result.skipped.filter((s) => s.reason === "unreadable date").length;
+    if (dateFails >= result.skipped.length / 2) {
+      return {
+        ...result,
+        error:
+          "This file doesn't look like one-row-per-record — most rows had no readable date. " +
+          "If names run down the side with dates across the top (like the media list), switch the " +
+          "Sheet layout above to “Register (dates across the top)” and import again.",
+      };
+    }
   }
 
   if (records.length) {
@@ -253,7 +273,9 @@ export async function importWideAttendance(formData: FormData): Promise<Attendan
       };
     }
 
-    const { data: profiles } = await admin.from("profiles").select("id, full_name, phone, whatsapp_number");
+    const profiles = await fetchAllPages((from, to) =>
+      admin.from("profiles").select("id, full_name, phone, whatsapp_number").range(from, to)
+    );
     const last10 = (p: string) => p.replace(/\D/g, "").slice(-10);
     const byPhone = new Map<string, string>();
     const byName = new Map<string, string>();
@@ -313,13 +335,24 @@ export async function importWideAttendance(formData: FormData): Promise<Attendan
     }
 
     if (summaries.length) {
+      // Monthly tallies are a bonus on top of the dated records — if their
+      // table doesn't exist yet (setup SQL not run), warn instead of failing
+      // the whole import.
+      let summaryErr: string | null = null;
       for (let i = 0; i < summaries.length; i += 1000) {
         const { error } = await admin
           .from("monthly_attendance_summary")
           .upsert(summaries.slice(i, i + 1000), { onConflict: "user_id,period" });
-        if (error) return { ...result, error: error.message };
+        if (error) {
+          summaryErr = error.message;
+          break;
+        }
       }
-      result.summaries = summaries.length;
+      if (summaryErr) {
+        result.warning = `Attendance records imported, but the monthly tallies (FEB/MARCH/…) could not be saved: ${summaryErr}. Run the latest setup SQL in Supabase, then re-import — it's safe to repeat.`;
+      } else {
+        result.summaries = summaries.length;
+      }
     }
 
     revalidatePath("/secretary");

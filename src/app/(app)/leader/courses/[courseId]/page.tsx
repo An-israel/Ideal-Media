@@ -17,11 +17,21 @@ export default async function EditCoursePage({
     .single();
   if (!course) notFound();
 
-  const { data: modules } = await supabase
+  // Fall back to a query without content_urls if that column's migration
+  // hasn't been run yet — the editor must never show an empty course.
+  let { data: modules } = await supabase
     .from("modules")
     .select("id, position, title, content_type, content_url, content_urls, content_body, assignments(instructions)")
     .eq("course_id", courseId)
     .order("position", { ascending: true });
+  if (!modules) {
+    const fallback = await supabase
+      .from("modules")
+      .select("id, position, title, content_type, content_url, content_body, assignments(instructions)")
+      .eq("course_id", courseId)
+      .order("position", { ascending: true });
+    modules = fallback.data as unknown as typeof modules;
+  }
 
   type Row = {
     id: string;

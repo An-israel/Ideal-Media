@@ -25,24 +25,24 @@ export default async function CoursesPage() {
   const enrollRows = ((enrollments ?? []) as unknown as EnrollRow[]).filter((r) => r.courses);
   const enrolledIds = new Set(enrollRows.map((r) => r.course_id));
 
-  // Secondary subunits the member belongs to.
-  const { data: secondaryMemberships } = await supabase
-    .from("subunit_members")
-    .select("subunit_id")
-    .eq("user_id", session.userId)
-    .eq("membership_type", "secondary");
-  const secondarySubunitIds = (secondaryMemberships ?? []).map((m) => m.subunit_id);
+  // Published courses in ANY secondary-category subunit are open for
+  // application — that's the cross-training path. (Primary-subunit courses
+  // stay private to their subunit.)
+  const { data: available } = await supabase
+    .from("courses")
+    .select("id, title, description, subunits!inner(name, category)")
+    .eq("is_published", true)
+    .eq("subunits.category", "secondary");
 
-  // Published courses in those secondary subunits the member could apply for.
-  let availableRows: { id: string; title: string; description: string | null }[] = [];
-  if (secondarySubunitIds.length) {
-    const { data: available } = await supabase
-      .from("courses")
-      .select("id, title, description")
-      .in("subunit_id", secondarySubunitIds)
-      .eq("is_published", true);
-    availableRows = (available ?? []).filter((c) => !enrolledIds.has(c.id));
-  }
+  type AvailableRow = {
+    id: string;
+    title: string;
+    description: string | null;
+    subunits: { name: string; category: string } | null;
+  };
+  const availableRows = ((available ?? []) as unknown as AvailableRow[]).filter(
+    (c) => !enrolledIds.has(c.id)
+  );
 
   return (
     <div>
@@ -91,7 +91,7 @@ export default async function CoursesPage() {
                   <Card key={c.id} className="flex h-full flex-col">
                     <CardHeader className="flex-1">
                       <div className="mb-2">
-                        <Badge variant="neutral">Locked</Badge>
+                        <Badge variant="neutral">{c.subunits?.name ?? "Apply to join"}</Badge>
                       </div>
                       <CardTitle className="text-base">{c.title}</CardTitle>
                       {c.description && (

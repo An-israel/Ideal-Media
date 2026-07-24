@@ -30,7 +30,7 @@ export default async function CoursePlayerPage({
     .eq("user_id", session.userId)
     .maybeSingle();
 
-  const [{ data: modules }, { data: progress }] = await Promise.all([
+  const [modulesRes, { data: progress }] = await Promise.all([
     supabase
       .from("modules")
       .select("id, position, title, content_type, content_url, content_urls, content_body, assignments(instructions)")
@@ -41,6 +41,16 @@ export default async function CoursePlayerPage({
       .select("module_id, status, rejection_note")
       .eq("user_id", session.userId),
   ]);
+  let modules = modulesRes.data;
+  // Fall back without content_urls if that column's migration isn't run yet.
+  if (!modules) {
+    const fallback = await supabase
+      .from("modules")
+      .select("id, position, title, content_type, content_url, content_body, assignments(instructions)")
+      .eq("course_id", courseId)
+      .order("position", { ascending: true });
+    modules = fallback.data as unknown as typeof modules;
+  }
 
   if (enrollment?.status !== "enrolled") {
     return (
