@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllPages } from "@/lib/fetch-all";
 import { PageHeader } from "@/components/app/page-header";
 import { ReviewClient } from "./review-client";
 import type { AiProposal } from "@/lib/database.types";
@@ -20,11 +21,14 @@ export default async function ReviewPage({
   if (!upload) notFound();
   if (upload.status === "committed") redirect("/secretary/attendance");
 
-  const { data: roster } = await supabase
-    .from("profiles")
-    .select("id, full_name")
-    .in("member_status", ["active", "traveled"])
-    .order("full_name");
+  const roster = await fetchAllPages((from, to) =>
+    supabase
+      .from("profiles")
+      .select("id, full_name")
+      .in("member_status", ["active", "traveled"])
+      .order("full_name")
+      .range(from, to)
+  );
 
   return (
     <div>

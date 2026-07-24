@@ -6,14 +6,18 @@ export default async function ApprovalsPage() {
   const supabase = await createClient();
 
   const [{ data: submissions }, { data: applications }] = await Promise.all([
+    // module_progress and enrollments each have TWO FKs to profiles
+    // (user_id + approved_by/decided_by), so the profiles embed MUST name the
+    // FK explicitly — otherwise PostgREST errors and returns nothing, which
+    // is why the queue showed "N pending" but listed nothing.
     supabase
       .from("module_progress")
-      .select("id, submitted_at, user_id, profiles(full_name), modules(title, position, courses(title))")
+      .select("id, submitted_at, user_id, profiles!module_progress_user_id_fkey(full_name), modules(title, position, courses(title))")
       .eq("status", "submitted")
       .order("submitted_at", { ascending: true }),
     supabase
       .from("enrollments")
-      .select("id, application_reason, user_id, profiles(full_name), courses(title)")
+      .select("id, application_reason, user_id, profiles!enrollments_user_id_fkey(full_name), courses(title)")
       .eq("status", "pending_application")
       .order("created_at", { ascending: true }),
   ]);
