@@ -178,7 +178,11 @@ export function RosterTable({
     }
     setBusy(true);
     try {
-      await addMemberToRoster(addForm);
+      const res = await addMemberToRoster(addForm);
+      if (!res.ok) {
+        toast({ title: "Could not add member", description: res.error, variant: "error" });
+        return;
+      }
       toast({ title: "Member added to the roster", variant: "success" });
       setAdding(false);
       setAddForm({ fullName: "", whatsappNumber: "", phone: "", email: "", primarySubunitId: subunits[0]?.id ?? "" });

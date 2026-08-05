@@ -63,88 +63,132 @@ export interface NewMemberInput {
   notes: string;
 }
 
+export interface AddMemberResult {
+  ok: boolean;
+  error?: string;
+}
+
 /**
  * Welfare adds a new member they met (e.g. a Sunday visitor). Creates an
  * unclaimed member record so it shows on the secretary's roster, opens a
  * new-member follow-up on the welfare board, and notifies the secretaries.
  * The person claims the record later by signing up with a matching phone.
+ *
+ * Returns a result object (never throws) — a thrown error in a server action
+ * is masked by Vercel in production ("An error occurred in the Server
+ * Components render…"), which hid the real reason (usually "already exists").
  */
-export async function addNewMember(input: NewMemberInput) {
-  await requireWelfare();
-  if (!input.fullName.trim()) throw new Error("Name is required.");
-  if (!input.primarySubunitId) throw new Error("Please choose a primary subunit.");
+export async function addNewMember(input: NewMemberInput): Promise<AddMemberResult> {
+  try {
+    const session = await getSessionRoles();
+    if (!session) return { ok: false, error: "You're signed out — please log in again." };
+    if (!session.roles.includes("welfare") && !session.roles.includes("super_admin")) {
+      return { ok: false, error: "Welfare access required." };
+    }
+    if (!input.fullName.trim()) return { ok: false, error: "Name is required." };
+    if (!input.primarySubunitId) return { ok: false, error: "Please choose a primary subunit." };
 
-  const admin = createAdminClient();
-  const phone = (input.whatsappNumber || input.phone || "").replace(/[^\d+]/g, "");
+    const admin = createAdminClient();
+    const phone = (input.whatsappNumber || input.phone || "").replace(/[^\d+]/g, "");
 
-  // Avoid creating a duplicate of someone already in the system.
-  if (input.email.trim()) {
-    const { data: byEmail } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("email", input.email.trim().toLowerCase())
-      .limit(1);
-    if (byEmail && byEmail.length) throw new Error("Someone with that email is already in the system.");
-  }
-  if (phone) {
-    const { data: byPhone } = await admin
-      .from("profiles")
-      .select("id")
-      .or(`whatsapp_number.eq.${phone},phone.eq.${phone}`)
-      .limit(1);
-    if (byPhone && byPhone.length) throw new Error("Someone with that phone number is already in the system.");
-  }
+    // Avoid creating a duplicate of someone already in the system.
+    if (input.email.trim()) {
+      const { data: byEmail } = await admin
+        .from("profiles")
+        .select("id")
+        .eq("email", input.email.trim().toLowerCase())
+        .limit(1);
+      if (byEmail && byEmail.length) {
+        return { ok: false, error: `${input.fullName} looks already added — someone with that email is on the roster.` };
+      }
+    }
+    if (phone) {
+      const { data: byPhone } = await admin
+        .from("profiles")
+        .select("id")
+        .or(`whatsapp_number.eq.${phone},phone.eq.${phone}`)
+        .limit(1);
+      if (byPhone && byPhone.length) {
+        return { ok: false, error: `${input.fullName} looks already added — someone with that phone number is on the roster.` };
+      }
+    }
 
-  // Real email if known, otherwise a placeholder they'll replace when they claim.
-  const email = input.email.trim().toLowerCase() || `nm-${randomUUID()}@no-email.ideal-media.app`;
+    // Real email if known, otherwise a placeholder they'll replace when they claim.
+    const email = input.email.trim().toLowerCase() || `nm-${randomUUID()}@no-email.ideal-media.app`;
 
-  const { data: created, error: createErr } = await admin.auth.admin.createUser({
-    email,
-    password: randomUUID(),
-    email_confirm: true,
-    user_metadata: { full_name: input.fullName },
-  });
-  if (createErr || !created.user) throw new Error(createErr?.message ?? "Could not add member.");
-  const userId = created.user.id;
-
-  await admin.from("profiles").insert({
-    id: userId,
-    full_name: input.fullName,
-    email,
-    phone: input.phone || null,
-    whatsapp_number: input.whatsappNumber || null,
-    member_status: "active",
-    claimed: false,
-    member_origin: "welfare",
-  });
-  await admin.from("user_roles").insert({ user_id: userId, role: "member" });
-  await admin.from("subunit_members").insert({
-    user_id: userId,
-    subunit_id: input.primarySubunitId,
-    membership_type: "primary",
-  });
-  await admin.from("welfare_followups").insert({
-    user_id: userId,
-    reason: "new_member",
-    auto_flagged: false,
-    notes: input.notes || null,
-  });
-
-  // Notify the secretaries — the new member now shows on their roster.
-  const { data: secretaries } = await admin
-    .from("user_roles")
-    .select("user_id")
-    .eq("role", "secretary");
-  for (const s of secretaries ?? []) {
-    await notify({
-      userId: s.user_id,
-      type: "new_member_added",
-      title: "New member added",
-      body: `${input.fullName} was added by welfare and is now on the roster.`,
-      link: "/secretary/roster",
+    const { data: created, error: createErr } = await admin.auth.admin.createUser({
+      email,
+      password: randomUUID(),
+      email_confirm: true,
+      user_metadata: { full_name: input.fullName },
     });
-  }
+    if (createErr || !created.user) {
+      const msg = createErr?.message ?? "";
+      if (/already been registered|already registered|duplicate/i.test(msg)) {
+        return { ok: false, error: `${input.fullName} looks already added — that email already has an account.` };
+      }
+      return { ok: false, error: msg || "Could not add member." };
+    }
+    const userId = created.user.id;
 
-  revalidatePath("/welfare");
-  revalidatePath("/secretary/roster");
+    // If any of the linked rows fail, remove the auth user so we don't leave a
+    // half-created member behind, and report the real reason.
+    const cleanup = async (message: string): Promise<AddMemberResult> => {
+      await admin.auth.admin.deleteUser(userId).catch(() => {});
+      return { ok: false, error: message };
+    };
+
+    const { error: profErr } = await admin.from("profiles").insert({
+      id: userId,
+      full_name: input.fullName,
+      email,
+      phone: input.phone || null,
+      whatsapp_number: input.whatsappNumber || null,
+      member_status: "active",
+      claimed: false,
+      member_origin: "welfare",
+    });
+    if (profErr) return cleanup(profErr.message);
+
+    const { error: roleErr } = await admin
+      .from("user_roles")
+      .insert({ user_id: userId, role: "member" });
+    if (roleErr) return cleanup(roleErr.message);
+
+    const { error: subErr } = await admin.from("subunit_members").insert({
+      user_id: userId,
+      subunit_id: input.primarySubunitId,
+      membership_type: "primary",
+    });
+    if (subErr) return cleanup(subErr.message);
+
+    const { error: fuErr } = await admin.from("welfare_followups").insert({
+      user_id: userId,
+      reason: "new_member",
+      auto_flagged: false,
+      notes: input.notes || null,
+    });
+    if (fuErr) return cleanup(fuErr.message);
+
+    // Notify the secretaries — the new member now shows on their roster.
+    const { data: secretaries } = await admin
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "secretary");
+    for (const s of secretaries ?? []) {
+      await notify({
+        userId: s.user_id,
+        type: "new_member_added",
+        title: "New member added",
+        body: `${input.fullName} was added by welfare and is now on the roster.`,
+        link: "/secretary/roster",
+      });
+    }
+
+    revalidatePath("/welfare");
+    revalidatePath("/secretary/roster");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not add member." };
+  }
 }
