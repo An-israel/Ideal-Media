@@ -20,6 +20,11 @@ export function ImportAttendanceForm({ activities }: { activities: { id: string;
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [file, setFile] = useState<File | null>(null);
   const [sheetUrl, setSheetUrl] = useState("");
+  // Blanks in a register aren't always an absence — some registers only mark
+  // attendance (AUDIT ATT-4).
+  const [blankPolicy, setBlankPolicy] = useState<"absent" | "skip">("absent");
+  // Historical imports shouldn't manufacture present-day welfare follow-ups.
+  const [runWelfare, setRunWelfare] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AttendanceImportResult | null>(null);
 
@@ -34,6 +39,8 @@ export function ImportAttendanceForm({ activities }: { activities: { id: string;
       else if (file) fd.set("file", file);
       fd.set("activityId", activityId);
       fd.set("year", year);
+      fd.set("blankPolicy", blankPolicy);
+      if (runWelfare) fd.set("runWelfare", "on");
       const res = mode === "wide" ? await importWideAttendance(fd) : await importPastAttendance(fd);
       setResult(res);
       router.refresh();
@@ -97,10 +104,48 @@ export function ImportAttendanceForm({ activities }: { activities: { id: string;
             </div>
           )}
 
+          {mode === "wide" && (
+            <div className="space-y-2">
+              <Label>Blank cells mean</Label>
+              <Select
+                value={blankPolicy}
+                onChange={(e) => setBlankPolicy(e.target.value as "absent" | "skip")}
+              >
+                <option value="absent">The person was absent</option>
+                <option value="skip">Nothing — don&apos;t record anything</option>
+              </Select>
+              <p className="text-xs text-[var(--text-muted)]">
+                Choose <b>nothing</b> if your register only ticks who attended. Recording
+                blanks as absences for dates before someone joined drags their attendance
+                rate down and can flag them to welfare unfairly.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label>Attendance spreadsheet</Label>
             <SheetSource file={file} setFile={setFile} sheetUrl={sheetUrl} setSheetUrl={setSheetUrl} />
+            <p className="text-xs text-[var(--text-muted)]">
+              Every tab in the workbook is read — a file with one sheet per month imports all
+              of them.
+            </p>
           </div>
+
+          <label className="flex items-start gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              checked={runWelfare}
+              onChange={(e) => setRunWelfare(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-[var(--border)]"
+            />
+            <span>
+              Update welfare follow-ups from this import
+              <span className="block text-xs text-[var(--text-muted)]">
+                Leave this off for old records. Turn it on only when the sheet covers the most
+                recent services, or people who have since returned may be flagged.
+              </span>
+            </span>
+          </label>
           <Button type="submit" disabled={loading || (!file && !sheetUrl.trim())}>
             <Upload className="h-4 w-4" />
             {loading ? "Importing…" : "Import attendance"}
@@ -120,6 +165,12 @@ export function ImportAttendanceForm({ activities }: { activities: { id: string;
               Imported {result.imported} record{result.imported === 1 ? "" : "s"}
               {result.summaries ? ` and ${result.summaries} monthly tall${result.summaries === 1 ? "y" : "ies"}` : ""}.
             </p>
+            {result.sheets && result.sheets.length > 0 && (
+              <p className="text-xs text-[var(--text-muted)]">
+                Read {result.sheets.length} sheet{result.sheets.length === 1 ? "" : "s"}:{" "}
+                {result.sheets.join(", ")}.
+              </p>
+            )}
             {result.skipped.length > 0 && (
               <div>
                 <p className="text-sm font-medium">

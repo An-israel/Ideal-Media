@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionRoles } from "@/lib/auth";
-import { getMemberPerformance } from "@/lib/queries";
+import { getMemberPerformances } from "@/lib/queries";
 import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -51,8 +51,12 @@ export default async function LeaderMembersPage() {
   const unique = [...byUser.values()];
 
   // Composite performance per member (RLS lets the leader read their data).
-  const performances = await Promise.all(
-    unique.map((r) => getMemberPerformance(supabase, r.user_id))
+  // Batched into a fixed number of queries (AUDIT PERF-1). This used to call
+  // getMemberPerformance per member inside Promise.all — 4 queries each, so
+  // ~800 queries on one page load for a 200-member subunit.
+  const performances = await getMemberPerformances(
+    supabase,
+    unique.map((r) => r.user_id)
   );
 
   return (
@@ -68,8 +72,11 @@ export default async function LeaderMembersPage() {
         <Card>
           <CardContent className="p-0">
             <div className="divide-y divide-[var(--border)]">
-              {unique.map((r, i) => {
-                const perf = performances[i];
+              {unique.map((r) => {
+                const perf = performances.get(r.user_id) ?? {
+                  parts: { progress: 0, assignments: 0, attendance: 0 },
+                  composite: 0,
+                };
                 const status = r.profiles?.member_status ?? "active";
                 return (
                   <Link

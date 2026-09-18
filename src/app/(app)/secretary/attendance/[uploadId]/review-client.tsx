@@ -42,10 +42,13 @@ export function ReviewClient({
   uploadId,
   proposal,
   roster,
+  parseError,
 }: {
   uploadId: string;
   proposal: AiProposal;
   roster: RosterMember[];
+  /** Why automatic reading failed, when it did (AUDIT ATT-2). */
+  parseError?: string | null;
 }) {
   const router = useRouter();
   const nameById = new Map(roster.map((r) => [r.id, r.full_name]));
@@ -101,6 +104,25 @@ export function ReviewClient({
 
   return (
     <div className="space-y-6">
+      {/* Why automatic reading failed, when it did. Without this the secretary
+          just landed on an empty review screen with no explanation — a missing
+          API key looked identical to an unreadable sheet (AUDIT ATT-2). */}
+      {parseError && (
+        <Card className="border-[var(--danger)]/40 bg-[var(--danger)]/5">
+          <CardContent className="flex items-start gap-3 py-4">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--danger)]" />
+            <div className="space-y-1">
+              <p className="text-sm font-medium">This sheet couldn&apos;t be read automatically</p>
+              <p className="text-sm text-[var(--text-muted)]">{parseError}</p>
+              <p className="text-sm text-[var(--text-muted)]">
+                Nothing was lost — map the names by hand below, or fix the file and upload it
+                again.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Matched */}
       <Card>
         <CardHeader>

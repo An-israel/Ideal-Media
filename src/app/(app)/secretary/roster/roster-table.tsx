@@ -139,12 +139,31 @@ export function RosterTable({
       return;
     setBusy(true);
     try {
-      await removeMembers([...selected]);
-      toast({ title: `Removed ${selected.size} member(s)`, variant: "success" });
+      // Reports per-member outcomes now (AUDIT ROS-1). The action used to
+      // discard the delete result, so this said "Removed N" even when every
+      // delete had failed on a foreign-key violation.
+      const { removed, failed } = await removeMembers([...selected]);
+      if (removed > 0) {
+        toast({ title: `Removed ${removed} member(s)`, variant: "success" });
+      }
+      if (failed.length > 0) {
+        toast({
+          title: `Could not remove ${failed.length} member(s)`,
+          description: failed.map((f) => `${f.name}: ${f.reason}`).join("; "),
+          variant: "error",
+        });
+      }
+      if (removed === 0 && failed.length === 0) {
+        toast({ title: "Nothing was removed", variant: "error" });
+      }
       setSelected(new Set());
       router.refresh();
     } catch (e) {
-      toast({ title: "Could not remove", description: String(e), variant: "error" });
+      toast({
+        title: "Could not remove",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "error",
+      });
     } finally {
       setBusy(false);
     }

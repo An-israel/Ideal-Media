@@ -1,12 +1,13 @@
 "use server";
 
-import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionRoles } from "@/lib/auth";
-import { notify } from "@/lib/notify";
-import { getWelfareTeam } from "@/lib/welfare-queries";
+import { notifyRole } from "@/lib/notify";
+import { createUnclaimedMember } from "@/lib/member-admin";
+import { resolveAutoFollowups } from "@/lib/welfare-automation";
+import { MAX_SUBUNITS_PER_MEMBER } from "@/lib/constants";
 import type { MemberStatus } from "@/lib/database.types";
 
 async function requireSecretary() {
@@ -36,9 +37,17 @@ export async function setMemberStatus(userIds: string[], status: MemberStatus) {
   revalidatePath("/secretary/roster");
   revalidatePath("/secretary");
   revalidatePath("/welfare");
+  revalidatePath("/admin/members");
 }
 
-async function syncWelfareForStatus(userIds: string[], status: MemberStatus) {
+/**
+ * Keeps the welfare board in step with a member's status.
+ *
+ * Exported so the super-admin path uses the same logic (AUDIT ROS-4) — that
+ * path skipped this entirely, so marking someone traveled opened a follow-up
+ * if a secretary did it and silently did nothing if the super admin did.
+ */
+export async function syncWelfareForStatus(userIds: string[], status: MemberStatus) {
   const admin = createAdminClient();
 
   if (status === "traveled" || status === "inactive") {
@@ -54,9 +63,13 @@ async function syncWelfareForStatus(userIds: string[], status: MemberStatus) {
     const toFlag = userIds.filter((id) => !alreadyOpen.has(id));
     if (toFlag.length === 0) return;
 
-    await admin
+    const { error } = await admin
       .from("welfare_followups")
       .insert(toFlag.map((user_id) => ({ user_id, reason, auto_flagged: true })));
+    if (error) {
+      console.error(`[roster] could not open ${reason} followups:`, error.message);
+      return;
+    }
 
     // Notify the welfare team, naming who needs a follow-up.
     const { data: profs } = await admin
@@ -65,30 +78,26 @@ async function syncWelfareForStatus(userIds: string[], status: MemberStatus) {
       .in("id", toFlag);
     const names = (profs ?? []).map((p) => p.full_name);
     const label = reason === "traveled" ? "traveled" : "inactive";
-    const team = await getWelfareTeam();
     const shown = names.slice(0, 5).join(", ");
     const more = names.length > 5 ? ` and ${names.length - 5} more` : "";
-    for (const t of team) {
-      await notify({
-        userId: t.id,
-        type: `member_${reason}`,
-        title:
-          toFlag.length === 1
-            ? `${names[0]} was marked ${label}`
-            : `${toFlag.length} members were marked ${label}`,
-        body: `Please follow up: ${shown}${more}.`,
-        link: "/welfare",
-      });
-    }
+
+    await notifyRole("welfare", {
+      type: `member_${reason}`,
+      title:
+        toFlag.length === 1
+          ? `${names[0] ?? "A member"} was marked ${label}`
+          : `${toFlag.length} members were marked ${label}`,
+      body: `Please follow up: ${shown}${more}.`,
+      link: "/welfare",
+    });
   } else if (status === "active") {
     // Returning members: close any auto-opened traveled/inactive follow-ups.
-    await admin
-      .from("welfare_followups")
-      .update({ status: "resolved" })
-      .in("user_id", userIds)
-      .in("reason", ["traveled", "inactive"])
-      .eq("auto_flagged", true)
-      .neq("status", "resolved");
+    await resolveAutoFollowups(userIds, ["traveled", "inactive"]);
+  } else if (status === "graduated" || status === "left") {
+    // Someone who has graduated or left doesn't need chasing — close every
+    // auto-opened follow-up (AUDIT WEL-7). These statuses used to fall through,
+    // leaving the queue cluttered with people who are gone.
+    await resolveAutoFollowups(userIds, ["traveled", "inactive", "missed_service"]);
   }
 }
 
@@ -106,86 +115,110 @@ export async function addMemberToRoster(input: {
   primarySubunitId: string;
 }) {
   await requireSecretary();
-  if (!input.fullName.trim()) throw new Error("Name is required.");
-  if (!input.primarySubunitId) throw new Error("Please choose a primary subunit.");
 
-  const admin = createAdminClient();
-  const phone = (input.whatsappNumber || input.phone || "").replace(/[^\d+]/g, "");
-
-  if (input.email.trim()) {
-    const { data: byEmail } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("email", input.email.trim().toLowerCase())
-      .limit(1);
-    if (byEmail && byEmail.length) throw new Error("Someone with that email is already in the system.");
-  }
-  if (phone) {
-    const { data: byPhone } = await admin
-      .from("profiles")
-      .select("id")
-      .or(`whatsapp_number.eq.${phone},phone.eq.${phone}`)
-      .limit(1);
-    if (byPhone && byPhone.length) throw new Error("Someone with that phone number is already in the system.");
-  }
-
-  const email = input.email.trim().toLowerCase() || `nm-${randomUUID()}@no-email.ideal-media.app`;
-
-  const { data: created, error: createErr } = await admin.auth.admin.createUser({
-    email,
-    password: randomUUID(),
-    email_confirm: true,
-    user_metadata: { full_name: input.fullName },
-  });
-  if (createErr || !created.user) throw new Error(createErr?.message ?? "Could not add member.");
-  const userId = created.user.id;
-
-  await admin.from("profiles").insert({
-    id: userId,
-    full_name: input.fullName,
-    email,
-    phone: input.phone || null,
-    whatsapp_number: input.whatsappNumber || null,
-    member_status: "active",
-    claimed: false,
-    member_origin: "secretary",
-  });
-  await admin.from("user_roles").insert({ user_id: userId, role: "member" });
-  await admin.from("subunit_members").insert({
-    user_id: userId,
-    subunit_id: input.primarySubunitId,
-    membership_type: "primary",
+  await createUnclaimedMember({
+    fullName: input.fullName,
+    email: input.email,
+    phone: input.phone,
+    whatsappNumber: input.whatsappNumber,
+    primarySubunitId: input.primarySubunitId,
+    origin: "secretary",
   });
 
   revalidatePath("/secretary/roster");
   revalidatePath("/secretary");
+}
+
+export interface RemoveMembersResult {
+  removed: number;
+  failed: { userId: string; name: string; reason: string }[];
 }
 
 /**
  * Permanently removes members from the system (profile + login + their
  * memberships/attendance via cascade). Destructive — the UI confirms first.
+ *
+ * Three fixes (AUDIT ROS-1, SEC-7):
+ *   - The `deleteUser` result is checked and reported. It used to be discarded,
+ *     so the action returned normally and the UI said "removed" while the member
+ *     was still there.
+ *   - Deletion actually works now: migration 0011 added ON DELETE clauses to the
+ *     five profiles references that had none, which raised a foreign-key
+ *     violation for anyone who had ever uploaded a sheet, created a course,
+ *     approved a module, decided an application, or been assigned a follow-up.
+ *   - Super admins cannot be deleted from here, and a secretary cannot delete
+ *     another privileged user. Previously any secretary could permanently
+ *     delete the super admin.
  */
-export async function removeMembers(userIds: string[]) {
+export async function removeMembers(userIds: string[]): Promise<RemoveMembersResult> {
   const session = await requireSecretary();
-  if (userIds.length === 0) return;
+  const result: RemoveMembersResult = { removed: 0, failed: [] };
+  if (userIds.length === 0) return result;
+
   // Never let someone delete their own account from here.
   const ids = userIds.filter((id) => id !== session.userId);
-  if (ids.length === 0) return;
+  if (ids.length === 0) return result;
 
   const admin = createAdminClient();
+
+  const [{ data: profiles }, { data: roles }] = await Promise.all([
+    admin.from("profiles").select("id, full_name").in("id", ids),
+    admin.from("user_roles").select("user_id, role").in("user_id", ids),
+  ]);
+  const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
+  const rolesByUser = new Map<string, string[]>();
+  for (const r of roles ?? []) {
+    rolesByUser.set(r.user_id, [...(rolesByUser.get(r.user_id) ?? []), r.role]);
+  }
+
+  const isSuperAdmin = session.roles.includes("super_admin");
+
   for (const id of ids) {
-    // Deleting the auth user cascades to profiles and dependent rows.
-    await admin.auth.admin.deleteUser(id);
+    const name = nameById.get(id) ?? id;
+    const theirRoles = rolesByUser.get(id) ?? [];
+
+    // A super admin account is never deletable through the roster.
+    if (theirRoles.includes("super_admin")) {
+      result.failed.push({
+        userId: id,
+        name,
+        reason: "super admins cannot be removed from the roster",
+      });
+      continue;
+    }
+    // Only a super admin may remove someone who holds a privileged role.
+    const privileged = theirRoles.some((r) =>
+      ["secretary", "welfare", "subunit_leader"].includes(r)
+    );
+    if (privileged && !isSuperAdmin) {
+      result.failed.push({
+        userId: id,
+        name,
+        reason: `holds the ${theirRoles.join("/")} role — a super admin must remove them`,
+      });
+      continue;
+    }
+
+    const { error } = await admin.auth.admin.deleteUser(id);
+    if (error) {
+      console.error(`[roster] could not delete member ${id}:`, error.message);
+      result.failed.push({ userId: id, name, reason: error.message });
+      continue;
+    }
+    result.removed++;
   }
 
   revalidatePath("/secretary/roster");
   revalidatePath("/secretary");
+  revalidatePath("/welfare");
+  revalidatePath("/admin/members");
+  return result;
 }
 
 /**
  * Adds selected members to a subunit. Becomes their primary if they have none
  * yet, otherwise a secondary membership. Skips members already in that subunit
- * and anyone already in 4 subunits (the cap).
+ * and anyone already at the subunit cap.
  */
 export async function assignSubunit(userIds: string[], subunitId: string) {
   await requireSecretary();
@@ -204,7 +237,11 @@ export async function assignSubunit(userIds: string[], subunitId: string) {
     byUser.set(m.user_id, list);
   }
 
-  const toInsert: { user_id: string; subunit_id: string; membership_type: "primary" | "secondary" }[] = [];
+  const toInsert: {
+    user_id: string;
+    subunit_id: string;
+    membership_type: "primary" | "secondary";
+  }[] = [];
   let skipped = 0;
   for (const userId of userIds) {
     const memberships = byUser.get(userId) ?? [];
@@ -212,9 +249,11 @@ export async function assignSubunit(userIds: string[], subunitId: string) {
       skipped++;
       continue; // already in this subunit
     }
-    if (memberships.length >= 4) {
+    // The cap is also enforced by a DB trigger (migration 0011), so a
+    // concurrent assignment can't slip past it.
+    if (memberships.length >= MAX_SUBUNITS_PER_MEMBER) {
       skipped++;
-      continue; // at the 4-subunit cap
+      continue;
     }
     const hasPrimary = memberships.some((m) => m.membership_type === "primary");
     toInsert.push({
@@ -231,5 +270,6 @@ export async function assignSubunit(userIds: string[], subunitId: string) {
 
   revalidatePath("/secretary/roster");
   revalidatePath("/secretary");
+  revalidatePath("/leader/members");
   return { added: toInsert.length, skipped };
 }

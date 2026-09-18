@@ -32,8 +32,11 @@ function ResetPasswordInner() {
     setError(null);
     setLoading(true);
     const supabase = createClient();
+    // Route the email link through /auth/callback so the recovery code is
+    // exchanged for a session before this form is shown again (AUDIT AUTH-1).
+    const next = encodeURIComponent("/reset-password?mode=update");
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password?mode=update`,
+      redirectTo: `${window.location.origin}/auth/callback?next=${next}`,
     });
     setLoading(false);
     if (error) return setError(error.message);
@@ -43,8 +46,25 @@ function ResetPasswordInner() {
   async function updatePassword(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (password.length < 8) {
+      return setError("Password must be at least 8 characters.");
+    }
     setLoading(true);
     const supabase = createClient();
+
+    // /auth/callback should have exchanged the recovery code for a session
+    // before we got here. If it didn't, say so plainly instead of surfacing
+    // Supabase's "Auth session missing!" (AUDIT AUTH-1).
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setLoading(false);
+      return setError(
+        "This reset link has expired or was already used. Request a new one below."
+      );
+    }
+
     const { error } = await supabase.auth.updateUser({ password });
     setLoading(false);
     if (error) return setError(error.message);

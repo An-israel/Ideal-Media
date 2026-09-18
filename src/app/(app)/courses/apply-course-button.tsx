@@ -25,13 +25,23 @@ export function ApplyCourseButton({
     if (!reason.trim()) return;
     setLoading(true);
     try {
-      await applyForCourse(courseId, reason);
+      // Returns a result rather than throwing, so "already applied" and
+      // "already declined" read as guidance instead of a server error.
+      const result = await applyForCourse(courseId, reason);
+      if (!result.ok) {
+        toast({ title: "Could not apply", description: result.error, variant: "error" });
+        return;
+      }
       setOpen(false);
       setReason("");
       toast({ title: "Application sent", description: "Your leader will review it.", variant: "success" });
       router.refresh();
     } catch (e) {
-      toast({ title: "Could not apply", description: String(e), variant: "error" });
+      toast({
+        title: "Could not apply",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "error",
+      });
     } finally {
       setLoading(false);
     }

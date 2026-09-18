@@ -21,16 +21,24 @@ export async function resolveCourseLeader(courseId: string): Promise<CourseLeade
     .single();
   if (!course) return null;
 
+  // Ordered so the fallback pick is stable rather than whatever Postgres
+  // happened to return first.
   const { data: leaders } = await admin
     .from("subunit_members")
     .select("user_id")
     .eq("subunit_id", course.subunit_id)
-    .eq("role_in_subunit", "leader");
+    .eq("role_in_subunit", "leader")
+    .order("created_at", { ascending: true });
 
   const leaderIds = (leaders ?? []).map((l) => l.user_id);
   if (leaderIds.length === 0) return null;
 
-  const targetId = leaderIds.includes(course.created_by) ? course.created_by : leaderIds[0];
+  // created_by is null once the author's account is deleted, so fall back to
+  // the subunit's longest-standing leader.
+  const targetId =
+    course.created_by && leaderIds.includes(course.created_by)
+      ? course.created_by
+      : leaderIds[0];
 
   const { data: profile } = await admin
     .from("profiles")

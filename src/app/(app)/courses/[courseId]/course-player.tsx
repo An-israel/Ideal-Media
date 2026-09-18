@@ -66,19 +66,27 @@ export function CoursePlayer({ modules }: { modules: PlayerModule[] }) {
     if (!active) return;
     setSubmitting(true);
     try {
-      const { waLink } = await submitModule(active.id);
+      const { waLink, warning } = await submitModule(active.id);
       if (waLink) {
         window.open(waLink, "_blank", "noopener");
       } else {
+        // `warning` explains exactly why no chat opened (no number on file, or
+        // a number that isn't valid internationally).
         toast({
           title: "Submitted",
-          description: "Your leader has no WhatsApp number on file — they've been notified in-app.",
+          description:
+            warning ??
+            "Your leader has no WhatsApp number on file — they've been notified in-app.",
           variant: "success",
         });
       }
       router.refresh();
     } catch (e) {
-      toast({ title: "Could not submit", description: String(e), variant: "error" });
+      toast({
+        title: "Could not submit",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "error",
+      });
     } finally {
       setSubmitting(false);
     }

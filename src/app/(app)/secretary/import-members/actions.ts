@@ -7,7 +7,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { readSheetRows } from "@/lib/attendance-parser";
 import { fetchSheetAsBuffer } from "@/lib/google-sheets";
 import { mapMemberColumns, mapSubunitValues, type MemberColumnMap } from "@/lib/import-mapper";
-import { ACCEPTED_UPLOAD_EXT, MAX_UPLOAD_BYTES } from "@/lib/constants";
+import { fetchAllRows } from "@/lib/pagination";
+import { parseBirthday } from "@/lib/dates";
+import { phoneKey } from "@/lib/phone";
+import {
+  ACCEPTED_UPLOAD_EXT,
+  MAX_UPLOAD_BYTES,
+  MAX_SUBUNITS_PER_MEMBER,
+} from "@/lib/constants";
 
 async function isSecretary() {
   const session = await getSessionRoles();
@@ -24,7 +31,11 @@ function field(lookup: Record<string, string>, names: string[]): string {
 }
 
 /** Prefer the AI-mapped column for a field; fall back to header guesses. */
-function pick(lookup: Record<string, string>, mappedHeader: string | undefined, heuristics: string[]): string {
+function pick(
+  lookup: Record<string, string>,
+  mappedHeader: string | undefined,
+  heuristics: string[]
+): string {
   if (mappedHeader) {
     const v = lookup[mappedHeader.trim().toLowerCase()];
     if (v != null && String(v).trim() !== "") return String(v).trim();
@@ -34,34 +45,20 @@ function pick(lookup: Record<string, string>, mappedHeader: string | undefined, 
 
 const firstToken = (s: string) => s.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)[0] ?? "";
 
-/** Tolerant subunit match: exact name/slug, partial contains, then first-word. */
-/** Parses a birthday cell (e.g. "6/27", "27/6", "June 27") to {month, day}. */
-function parseBirthday(raw: string): { month: number; day: number } | null {
-  const s = raw.trim();
-  if (!s) return null;
-  const m = s.match(/(\d{1,2})\s*[/.\-]\s*(\d{1,2})/);
-  if (m) {
-    let a = +m[1], b = +m[2];
-    // Sheet uses month/day; if the first number can't be a month, swap.
-    if (a > 12 && b <= 12) [a, b] = [b, a];
-    if (a >= 1 && a <= 12 && b >= 1 && b <= 31) return { month: a, day: b };
-    return null;
-  }
-  const d = new Date(s);
-  if (!isNaN(d.getTime()) && /[a-z]/i.test(s)) return { month: d.getMonth() + 1, day: d.getDate() };
-  return null;
-}
-
 // Common wording differences → the app's subunit name.
 const SUBUNIT_ALIASES: Record<string, string> = {
   "graphics design": "graphic design",
   "graphic designs": "graphic design",
-  "graphics": "graphic design",
+  graphics: "graphic design",
   publicity: "publication",
   publications: "publication",
 };
 
-function matchSubunit(subunits: { id: string; name: string; slug: string }[], value: string): string | undefined {
+/** Tolerant subunit match: exact name/slug, partial contains, then first-word. */
+function matchSubunit(
+  subunits: { id: string; name: string; slug: string }[],
+  value: string
+): string | undefined {
   let v = value.trim().toLowerCase();
   if (!v) return undefined;
   if (SUBUNIT_ALIASES[v]) v = SUBUNIT_ALIASES[v];
@@ -81,6 +78,8 @@ function matchSubunit(subunits: { id: string; name: string; slug: string }[], va
 export interface ImportResult {
   created: number;
   skipped: { row: number; name: string; reason: string }[];
+  /** Workbook tabs that were read. */
+  sheets?: string[];
   /** Set when the whole import failed (e.g. sheet not shared) — friendly message. */
   error?: string;
 }
@@ -114,6 +113,7 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
     }
 
     const admin = createAdminClient();
+    // Reads every sheet in the workbook, not just the first (AUDIT ATT-1).
     const rows = readSheetRows(buffer);
     if (rows.length === 0) {
       return { ...empty, error: "That sheet looks empty — check the link/file and try again." };
@@ -122,28 +122,66 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
     const { data: subunitsData } = await admin.from("subunits").select("id, name, slug");
     const subunits = subunitsData ?? [];
 
+    // Existing members, read ONCE and paged (AUDIT PERF-2). The per-row
+    // duplicate check was two queries per spreadsheet row against an unbounded
+    // select that caps at 1000 — both slow and silently wrong past that.
+    const existingProfiles = await fetchAllRows<{
+      id: string;
+      email: string | null;
+      phone: string | null;
+      whatsapp_number: string | null;
+    }>((from, to) =>
+      admin.from("profiles").select("id, email, phone, whatsapp_number").range(from, to)
+    );
+    const takenEmails = new Set<string>();
+    const takenPhones = new Set<string>();
+    for (const p of existingProfiles) {
+      if (p.email) takenEmails.add(p.email.toLowerCase());
+      for (const raw of [p.phone, p.whatsapp_number]) {
+        const key = phoneKey(raw);
+        if (key) takenPhones.add(key);
+      }
+    }
+
     // Let AI figure out which columns are which; fall back to header guesses.
-    const headers = Object.keys(rows[0]);
+    const headers = Object.keys(rows[0]).filter((h) => h !== "__sheet");
     let colMap: MemberColumnMap | null = null;
     try {
       colMap = await mapMemberColumns(headers, rows.slice(0, 5));
-    } catch {
+    } catch (e) {
+      console.error("[import-members] column mapping failed:", e);
       colMap = null;
     }
+
+    const toLookup = (row: Record<string, unknown>): Record<string, string> => {
+      const lk: Record<string, string> = {};
+      for (const [k, v] of Object.entries(row)) {
+        if (k === "__sheet") continue;
+        lk[k.trim().toLowerCase()] = String(v ?? "");
+      }
+      return lk;
+    };
+
+    const SUBUNIT_HEADERS = [
+      "primary subunit", "subunit", "primary unit", "unit", "department", "dept",
+      "team", "section", "media unit", "unit of service", "portfolio", "group",
+    ];
 
     // AI-map the distinct subunit values in the sheet to our existing subunits,
     // so messy names ("Utility (Technical in Media)") still match.
     const distinctSubunitValues = new Set<string>();
     for (const r of rows) {
-      const lk: Record<string, string> = {};
-      for (const [k, v] of Object.entries(r)) lk[k.trim().toLowerCase()] = String(v ?? "");
-      const pv = pick(lk, colMap?.primary_subunit, ["primary subunit", "subunit", "primary unit", "unit"]);
+      const pv = pick(toLookup(r), colMap?.primary_subunit, SUBUNIT_HEADERS);
       if (pv) distinctSubunitValues.add(pv);
     }
     let aiSubunitMap: Record<string, string> = {};
     try {
-      aiSubunitMap = await mapSubunitValues([...distinctSubunitValues], subunits.map((s) => s.name));
-    } catch {
+      aiSubunitMap = await mapSubunitValues(
+        [...distinctSubunitValues],
+        subunits.map((s) => s.name)
+      );
+    } catch (e) {
+      console.error("[import-members] subunit mapping failed:", e);
       aiSubunitMap = {};
     }
 
@@ -154,27 +192,39 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
       return mapped ? matchSubunit(subunits, mapped) : undefined;
     };
 
-    const result: ImportResult = { created: 0, skipped: [] };
+    const result: ImportResult = { created: 0, skipped: [], sheets: [] };
+    const seenSheets = new Set<string>();
 
     for (let i = 0; i < rows.length; i++) {
-      const lookup: Record<string, string> = {};
-      for (const [k, v] of Object.entries(rows[i])) lookup[k.trim().toLowerCase()] = String(v ?? "");
+      const lookup = toLookup(rows[i]);
+      const sheetName = String(rows[i].__sheet ?? "");
+      if (sheetName) seenSheets.add(sheetName);
+      const rowNum = i + 2;
+      const rowLabel = sheetName ? `${sheetName} row ${rowNum}` : `row ${rowNum}`;
 
       const fullName = pick(lookup, colMap?.full_name, ["full name", "name", "fullname", "member"]);
       const email = pick(lookup, colMap?.email, ["email", "email address"]).toLowerCase();
       const phone = pick(lookup, colMap?.phone, ["phone", "phone number"]);
       const whatsapp = pick(lookup, colMap?.whatsapp, ["whatsapp", "whatsapp number", "wa"]);
-      const primaryName = pick(lookup, colMap?.primary_subunit, ["primary subunit", "subunit", "primary unit", "unit", "department", "dept", "team", "section", "media unit", "unit of service", "portfolio", "group"]);
-      const secondaryRaw = pick(lookup, colMap?.secondary_subunits, ["secondary subunits", "secondary", "other subunits"]);
-      const bday = parseBirthday(pick(lookup, colMap?.birthday, ["birthday", "birth day", "date of birth", "dob", "d.o.b"]));
+      const primaryName = pick(lookup, colMap?.primary_subunit, SUBUNIT_HEADERS);
+      const secondaryRaw = pick(lookup, colMap?.secondary_subunits, [
+        "secondary subunits", "secondary", "other subunits",
+      ]);
+      // Day-first parsing (AUDIT ROS-6): the old helper assumed month/day, so
+      // an ambiguous "6/7" was always read as June 7th, never July 6th — which
+      // is backwards for how these sheets are written.
+      const bday = parseBirthday(
+        pick(lookup, colMap?.birthday, ["birthday", "birth day", "date of birth", "dob", "d.o.b"])
+      );
 
-      const rowNum = i + 2;
       if (!fullName) {
-        result.skipped.push({ row: rowNum, name: "(no name)", reason: "no name found in the row" });
+        result.skipped.push({ row: rowNum, name: "(no name)", reason: `${rowLabel}: no name found` });
         continue;
       }
-      // A member can belong to up to 4 subunits (1 home + up to 3 more), read
-      // from the subunit column(s); values may be comma/semicolon/slash separated.
+
+      // A member can belong to up to MAX_SUBUNITS_PER_MEMBER subunits (1 home +
+      // the rest), read from the subunit column(s); values may be
+      // comma/semicolon/slash separated.
       const unitValues = [primaryName, secondaryRaw]
         .join(",")
         .split(/[,;/]/)
@@ -191,34 +241,30 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
           row: rowNum,
           name: fullName,
           reason: primaryName
-            ? `unknown subunit "${primaryName}" (or set a default subunit)`
-            : "no subunit — set a default subunit above",
+            ? `${rowLabel}: unknown subunit "${primaryName}" (or set a default subunit)`
+            : `${rowLabel}: no subunit — set a default subunit above`,
         });
         continue;
       }
-      const capped = matchedIds.slice(0, 4); // at most four
+      const capped = matchedIds.slice(0, MAX_SUBUNITS_PER_MEMBER);
       const primaryId = capped[0];
       const secondaryIds = capped.slice(1);
 
       // Skip if already in the system (by email if present, else by phone).
-      if (email) {
-        const { data: existing } = await admin.from("profiles").select("id").eq("email", email).maybeSingle();
-        if (existing) {
-          result.skipped.push({ row: rowNum, name: fullName, reason: "already exists" });
-          continue;
-        }
+      // Checked against the in-memory index so a duplicate created earlier in
+      // this same import is caught too.
+      if (email && takenEmails.has(email)) {
+        result.skipped.push({ row: rowNum, name: fullName, reason: `${rowLabel}: already exists` });
+        continue;
       }
-      const phoneKey = (whatsapp || phone).replace(/[^\d+]/g, "");
-      if (phoneKey) {
-        const { data: existingPhone } = await admin
-          .from("profiles")
-          .select("id")
-          .or(`whatsapp_number.eq.${phoneKey},phone.eq.${phoneKey}`)
-          .limit(1);
-        if (existingPhone && existingPhone.length) {
-          result.skipped.push({ row: rowNum, name: fullName, reason: "already exists (phone match)" });
-          continue;
-        }
+      const pKey = phoneKey(whatsapp || phone);
+      if (pKey && takenPhones.has(pKey)) {
+        result.skipped.push({
+          row: rowNum,
+          name: fullName,
+          reason: `${rowLabel}: already exists (phone match)`,
+        });
+        continue;
       }
 
       // Email is optional — generate a placeholder they replace at signup.
@@ -231,7 +277,11 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
         user_metadata: { full_name: fullName },
       });
       if (createErr || !created.user) {
-        result.skipped.push({ row: rowNum, name: fullName, reason: createErr?.message ?? "could not create" });
+        result.skipped.push({
+          row: rowNum,
+          name: fullName,
+          reason: `${rowLabel}: ${createErr?.message ?? "could not create"}`,
+        });
         continue;
       }
       const userId = created.user.id;
@@ -249,12 +299,24 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
         birth_day: bday?.day ?? null,
       });
       if (profErr) {
-        await admin.auth.admin.deleteUser(userId);
-        result.skipped.push({ row: rowNum, name: fullName, reason: profErr.message });
+        // Roll the auth user back so it can't become an invisible orphan.
+        const { error: delErr } = await admin.auth.admin.deleteUser(userId);
+        if (delErr) {
+          console.error(
+            `[import-members] orphaned auth user ${userId} (${accountEmail}):`,
+            delErr.message
+          );
+        }
+        result.skipped.push({ row: rowNum, name: fullName, reason: `${rowLabel}: ${profErr.message}` });
         continue;
       }
 
-      await admin.from("user_roles").insert({ user_id: userId, role: "member" });
+      const { error: roleErr } = await admin
+        .from("user_roles")
+        .insert({ user_id: userId, role: "member" });
+      if (roleErr) {
+        console.error(`[import-members] could not grant member role to ${userId}:`, roleErr.message);
+      }
 
       const memberships: {
         user_id: string;
@@ -268,10 +330,28 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
           membership_type: "secondary" as const,
         })),
       ];
-      await admin.from("subunit_members").insert(memberships);
+      const { error: memberErr } = await admin.from("subunit_members").insert(memberships);
+      if (memberErr) {
+        console.error(
+          `[import-members] could not add ${userId} to subunit(s):`,
+          memberErr.message
+        );
+        result.skipped.push({
+          row: rowNum,
+          name: fullName,
+          reason: `${rowLabel}: created, but subunit assignment failed — ${memberErr.message}`,
+        });
+        continue;
+      }
+
+      // Keep the in-memory index current so later rows see this member.
+      if (email) takenEmails.add(email);
+      if (pKey) takenPhones.add(pKey);
 
       result.created++;
     }
+
+    result.sheets = [...seenSheets];
 
     // Clear top-level guidance when nothing imported.
     if (result.created === 0 && result.skipped.length > 0) {

@@ -54,7 +54,10 @@ export type Profile = {
   member_origin: string;
   birth_month: number | null;
   birth_day: number | null;
+  /** Version of the code of conduct this member accepted (null = none yet). */
+  coc_version_accepted: number | null;
   created_at: string;
+  updated_at: string | null;
 };
 
 export type Subunit = {
@@ -80,9 +83,11 @@ export type Course = {
   subunit_id: string;
   title: string;
   description: string | null;
-  created_by: string;
+  /** Null once the author's account is deleted (ON DELETE SET NULL). */
+  created_by: string | null;
   is_published: boolean;
   created_at: string;
+  updated_at: string | null;
 };
 
 export type Module = {
@@ -95,6 +100,7 @@ export type Module = {
   content_urls: string[];
   content_body: string | null;
   created_at: string;
+  updated_at: string | null;
 };
 
 export type Assignment = {
@@ -124,7 +130,10 @@ export type ModuleProgress = {
   approved_at: string | null;
   approved_by: string | null;
   rejection_note: string | null;
+  /** How many times this submission has been sent back (AUDIT CRS-6). */
+  rejection_count: number;
   created_at: string;
+  updated_at: string | null;
 };
 
 export type CodeOfConduct = {
@@ -152,6 +161,21 @@ export type CocAttempt = {
   score: number;
   total: number;
   attempted_at: string;
+  /** Which COC version this attempt was against. */
+  coc_version: number | null;
+  created_at: string;
+};
+
+/**
+ * A quiz the server issued to a member. Grading is scoped to one of these and
+ * consumes it, so the question set and the denominator are server-owned
+ * (AUDIT SEC-4).
+ */
+export type CocQuizIssue = {
+  id: string;
+  user_id: string;
+  question_ids: string[];
+  consumed: boolean;
   created_at: string;
 };
 
@@ -166,13 +190,16 @@ export type Activity = {
 
 export type AttendanceUpload = {
   id: string;
-  uploaded_by: string;
+  /** Null once the uploader's account is deleted (ON DELETE SET NULL). */
+  uploaded_by: string | null;
   original_filename: string;
   raw_storage_path: string;
   activity_id: string;
   service_date: string;
   status: UploadStatus;
   ai_proposal: AiProposal | null;
+  /** Why automatic parsing failed, if it did (AUDIT ATT-2). */
+  parse_error: string | null;
   committed_at: string | null;
   created_at: string;
 };
@@ -206,6 +233,7 @@ export type WelfareFollowup = {
   assigned_to: string | null;
   last_contact_at: string | null;
   created_at: string;
+  updated_at: string | null;
 };
 
 export type Notification = {
@@ -273,6 +301,7 @@ export type Database = {
       code_of_conduct: TableDef<CodeOfConduct>;
       coc_questions: TableDef<CocQuestion>;
       coc_attempts: TableDef<CocAttempt>;
+      coc_quiz_issues: TableDef<CocQuizIssue>;
       activities: TableDef<Activity>;
       attendance_uploads: TableDef<AttendanceUpload>;
       attendance_records: TableDef<AttendanceRecord>;
@@ -282,7 +311,16 @@ export type Database = {
       app_settings: TableDef<AppSetting>;
     };
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    Functions: {
+      publish_coc_version: {
+        Args: { p_title: string; p_body: string };
+        Returns: number;
+      };
+      move_module: {
+        Args: { p_module_id: string; p_direction: "up" | "down" };
+        Returns: undefined;
+      };
+    };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
   };

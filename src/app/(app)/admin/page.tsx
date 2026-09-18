@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllRows } from "@/lib/pagination";
 import { Card, CardContent } from "@/components/ui/card";
 import { AdminCharts } from "./admin-charts";
 
@@ -9,6 +10,7 @@ export default async function AdminOverviewPage() {
     { count: total },
     { count: active },
     { count: cocDone },
+    { count: claimed },
     { count: submitted },
     { count: pendingApps },
     { count: welfareQueue },
@@ -16,24 +18,53 @@ export default async function AdminOverviewPage() {
     admin.from("profiles").select("id", { count: "exact", head: true }),
     admin.from("profiles").select("id", { count: "exact", head: true }).eq("member_status", "active"),
     admin.from("profiles").select("id", { count: "exact", head: true }).eq("coc_completed", true),
+    // Only members who can actually log in are eligible for the COC gate.
+    admin.from("profiles").select("id", { count: "exact", head: true }).eq("claimed", true),
     admin.from("module_progress").select("id", { count: "exact", head: true }).eq("status", "submitted"),
     admin.from("enrollments").select("id", { count: "exact", head: true }).eq("status", "pending_application"),
     admin.from("welfare_followups").select("id", { count: "exact", head: true }).neq("status", "resolved"),
   ]);
 
   const totalMembers = total ?? 0;
-  const cocRate = totalMembers ? Math.round(((cocDone ?? 0) / totalMembers) * 100) : 0;
+  // Measured against CLAIMED accounts (AUDIT ADM-7). Dividing by every profile
+  // counted imported members who have never logged in and cannot possibly have
+  // completed the COC, so the headline number was permanently misleading.
+  const cocEligible = claimed ?? 0;
+  const cocRate = cocEligible ? Math.round(((cocDone ?? 0) / cocEligible) * 100) : 0;
 
   // Attendance trend: present count per service date, per activity.
-  const { data: attendance } = await admin
+  //
+  // Ordered NEWEST first (AUDIT ADM-1). This used to be ascending with no
+  // limit, so PostgREST returned the OLDEST 1000 records and `.slice(-12)` took
+  // the last 12 of that stale window — meaning that past 1000 attendance
+  // records the chart froze and never showed a recent service again.
+  const TREND_DATES = 12;
+  const { data: recentDates } = await admin
     .from("attendance_records")
-    .select("service_date, status, activities(name)")
-    .order("service_date", { ascending: true });
+    .select("service_date")
+    .order("service_date", { ascending: false })
+    .limit(2000);
+  const trendDates = [...new Set((recentDates ?? []).map((r) => r.service_date))]
+    .slice(0, TREND_DATES)
+    .sort();
+
   type AttRow = { service_date: string; status: string; activities: { name: string } | null };
-  const attRows = (attendance ?? []) as unknown as AttRow[];
+  const attRows = trendDates.length
+    ? await fetchAllRows<AttRow>((from, to) =>
+        admin
+          .from("attendance_records")
+          .select("service_date, status, activities(name)")
+          .in("service_date", trendDates)
+          .range(from, to) as unknown as PromiseLike<{
+          data: AttRow[] | null;
+          error: { message: string } | null;
+        }>
+      )
+    : [];
 
   const trendMap = new Map<string, Record<string, number>>();
   const activityNames = new Set<string>();
+  for (const date of trendDates) trendMap.set(date, {});
   for (const r of attRows) {
     const name = r.activities?.name ?? "Unknown";
     activityNames.add(name);
@@ -41,29 +72,42 @@ export default async function AdminOverviewPage() {
     if (r.status === "present") entry[name] = (entry[name] ?? 0) + 1;
     trendMap.set(r.service_date, entry);
   }
-  const attendanceTrend = [...trendMap.entries()]
-    .map(([date, counts]) => ({ date, ...counts }))
-    .slice(-12);
+  const attendanceTrend = [...trendMap.entries()].map(([date, counts]) => ({ date, ...counts }));
 
-  // Course completion rate per subunit.
-  const [{ data: subunits }, { data: courses }, { data: modules }, { data: enrollments }, { data: progress }] =
-    await Promise.all([
-      admin.from("subunits").select("id, name"),
-      admin.from("courses").select("id, subunit_id"),
-      admin.from("modules").select("id, course_id"),
-      admin.from("enrollments").select("course_id").eq("status", "enrolled"),
-      admin.from("module_progress").select("module_id, status").eq("status", "approved"),
-    ]);
+  // Course completion rate per subunit. Paged — the enrollment and progress
+  // reads capped at 1000 rows with no error, which made every rate wrong at the
+  // same threshold as the chart above (AUDIT ADM-1 / PERF-2).
+  const [subunits, courses, modules, enrollments, progress] = await Promise.all([
+    fetchAllRows<{ id: string; name: string }>((from, to) =>
+      admin.from("subunits").select("id, name").range(from, to)
+    ),
+    fetchAllRows<{ id: string; subunit_id: string }>((from, to) =>
+      admin.from("courses").select("id, subunit_id").range(from, to)
+    ),
+    fetchAllRows<{ id: string; course_id: string }>((from, to) =>
+      admin.from("modules").select("id, course_id").range(from, to)
+    ),
+    fetchAllRows<{ course_id: string }>((from, to) =>
+      admin.from("enrollments").select("course_id").eq("status", "enrolled").range(from, to)
+    ),
+    fetchAllRows<{ module_id: string; status: string }>((from, to) =>
+      admin
+        .from("module_progress")
+        .select("module_id, status")
+        .eq("status", "approved")
+        .range(from, to)
+    ),
+  ]);
 
-  const courseSubunit = new Map((courses ?? []).map((c) => [c.id, c.subunit_id]));
+  const courseSubunit = new Map(courses.map((c) => [c.id, c.subunit_id]));
   const moduleCountByCourse = new Map<string, number>();
   const moduleCourse = new Map<string, string>();
-  for (const m of modules ?? []) {
+  for (const m of modules) {
     moduleCountByCourse.set(m.course_id, (moduleCountByCourse.get(m.course_id) ?? 0) + 1);
     moduleCourse.set(m.id, m.course_id);
   }
   const expectedBySubunit = new Map<string, number>();
-  for (const e of enrollments ?? []) {
+  for (const e of enrollments) {
     const subunit = courseSubunit.get(e.course_id);
     if (!subunit) continue;
     expectedBySubunit.set(
@@ -72,19 +116,19 @@ export default async function AdminOverviewPage() {
     );
   }
   const approvedBySubunit = new Map<string, number>();
-  for (const p of progress ?? []) {
+  for (const p of progress) {
     const course = moduleCourse.get(p.module_id);
     const subunit = course ? courseSubunit.get(course) : undefined;
     if (!subunit) continue;
     approvedBySubunit.set(subunit, (approvedBySubunit.get(subunit) ?? 0) + 1);
   }
-  const completion = (subunits ?? [])
+  const completion = subunits
     .map((s) => {
       const expected = expectedBySubunit.get(s.id) ?? 0;
       const approved = approvedBySubunit.get(s.id) ?? 0;
       return { subunit: s.name, rate: expected ? Math.round((approved / expected) * 100) : 0 };
     })
-    .filter((c) => c.rate > 0 || expectedBySubunit.has((subunits ?? []).find((s) => s.name === c.subunit)?.id ?? ""));
+    .filter((c) => c.rate > 0 || expectedBySubunit.has(subunits.find((s) => s.name === c.subunit)?.id ?? ""));
 
   const cards = [
     { label: "Total members", value: totalMembers },
