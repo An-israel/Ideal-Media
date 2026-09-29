@@ -1,11 +1,12 @@
 "use server";
 
-import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionRoles } from "@/lib/auth";
-import { notify } from "@/lib/notify";
+import { notify, notifyRole } from "@/lib/notify";
+import { createUnclaimedMember } from "@/lib/member-admin";
+import { MAX_WELFARE_LEVEL } from "@/lib/constants";
 import type { WelfareFollowup, WelfareStatus } from "@/lib/database.types";
 
 async function requireWelfare() {
@@ -30,8 +31,25 @@ export async function updateFollowup(
   await requireWelfare();
   const supabase = await createClient();
 
+  // Read the current row first so we can tell what actually changed. Validated
+  // against the level range here rather than letting the DB check constraint
+  // throw a raw Postgres error at the UI (AUDIT DATA-4).
+  const { data: current, error: readErr } = await supabase
+    .from("welfare_followups")
+    .select("assigned_to, level, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (readErr) throw new Error(readErr.message);
+  if (!current) throw new Error("That follow-up no longer exists.");
+
   const update: Partial<WelfareFollowup> = {};
-  if (patch.level !== undefined) update.level = patch.level;
+  if (patch.level !== undefined) {
+    const level = Math.floor(patch.level);
+    if (!Number.isFinite(level) || level < 1 || level > MAX_WELFARE_LEVEL) {
+      throw new Error(`Level must be between 1 and ${MAX_WELFARE_LEVEL}.`);
+    }
+    update.level = level;
+  }
   if (patch.status !== undefined) update.status = patch.status;
   if (patch.notes !== undefined) update.notes = patch.notes;
   if (patch.assignedTo !== undefined) update.assigned_to = patch.assignedTo;
@@ -40,10 +58,18 @@ export async function updateFollowup(
   const { error } = await supabase.from("welfare_followups").update(update).eq("id", id);
   if (error) throw new Error(error.message);
 
-  // Notify a newly-assigned welfare team member (Section 13).
-  if (patch.assignedTo) {
+  // Notify only on an actual change of assignee (AUDIT WEL-4). The condition
+  // used to be "assignedTo is present in the patch", so editing the notes or
+  // status of an already-assigned follow-up re-notified the assignee every
+  // time it was saved.
+  const assigneeChanged =
+    patch.assignedTo !== undefined &&
+    patch.assignedTo !== null &&
+    patch.assignedTo !== current.assigned_to;
+
+  if (assigneeChanged) {
     await notify({
-      userId: patch.assignedTo,
+      userId: patch.assignedTo!,
       type: "welfare_assigned",
       title: "Welfare follow-up assigned to you",
       body: "A follow-up has been assigned to you.",
@@ -71,80 +97,40 @@ export interface NewMemberInput {
  */
 export async function addNewMember(input: NewMemberInput) {
   await requireWelfare();
-  if (!input.fullName.trim()) throw new Error("Name is required.");
-  if (!input.primarySubunitId) throw new Error("Please choose a primary subunit.");
+
+  // Creation is transactional-ish: the auth user is rolled back if any later
+  // step fails, so a failure can't leave an orphaned login (AUDIT ROS-2).
+  const { userId } = await createUnclaimedMember({
+    fullName: input.fullName,
+    email: input.email,
+    phone: input.phone,
+    whatsappNumber: input.whatsappNumber,
+    primarySubunitId: input.primarySubunitId,
+    origin: "welfare",
+  });
 
   const admin = createAdminClient();
-  const phone = (input.whatsappNumber || input.phone || "").replace(/[^\d+]/g, "");
-
-  // Avoid creating a duplicate of someone already in the system.
-  if (input.email.trim()) {
-    const { data: byEmail } = await admin
-      .from("profiles")
-      .select("id")
-      .eq("email", input.email.trim().toLowerCase())
-      .limit(1);
-    if (byEmail && byEmail.length) throw new Error("Someone with that email is already in the system.");
-  }
-  if (phone) {
-    const { data: byPhone } = await admin
-      .from("profiles")
-      .select("id")
-      .or(`whatsapp_number.eq.${phone},phone.eq.${phone}`)
-      .limit(1);
-    if (byPhone && byPhone.length) throw new Error("Someone with that phone number is already in the system.");
-  }
-
-  // Real email if known, otherwise a placeholder they'll replace when they claim.
-  const email = input.email.trim().toLowerCase() || `nm-${randomUUID()}@no-email.ideal-media.app`;
-
-  const { data: created, error: createErr } = await admin.auth.admin.createUser({
-    email,
-    password: randomUUID(),
-    email_confirm: true,
-    user_metadata: { full_name: input.fullName },
-  });
-  if (createErr || !created.user) throw new Error(createErr?.message ?? "Could not add member.");
-  const userId = created.user.id;
-
-  await admin.from("profiles").insert({
-    id: userId,
-    full_name: input.fullName,
-    email,
-    phone: input.phone || null,
-    whatsapp_number: input.whatsappNumber || null,
-    member_status: "active",
-    claimed: false,
-    member_origin: "welfare",
-  });
-  await admin.from("user_roles").insert({ user_id: userId, role: "member" });
-  await admin.from("subunit_members").insert({
-    user_id: userId,
-    subunit_id: input.primarySubunitId,
-    membership_type: "primary",
-  });
-  await admin.from("welfare_followups").insert({
+  const { error: followupErr } = await admin.from("welfare_followups").insert({
     user_id: userId,
     reason: "new_member",
     auto_flagged: false,
     notes: input.notes || null,
   });
-
-  // Notify the secretaries — the new member now shows on their roster.
-  const { data: secretaries } = await admin
-    .from("user_roles")
-    .select("user_id")
-    .eq("role", "secretary");
-  for (const s of secretaries ?? []) {
-    await notify({
-      userId: s.user_id,
-      type: "new_member_added",
-      title: "New member added",
-      body: `${input.fullName} was added by welfare and is now on the roster.`,
-      link: "/secretary/roster",
-    });
+  if (followupErr) {
+    // The member exists and is on the roster; only the board entry failed.
+    console.error("[welfare] could not open new-member followup:", followupErr.message);
   }
+
+  // Notify the secretaries — the new member now shows on their roster. One
+  // batched insert rather than a client and a round trip per recipient.
+  await notifyRole("secretary", {
+    type: "new_member_added",
+    title: "New member added",
+    body: `${input.fullName.trim()} was added by welfare and is now on the roster.`,
+    link: "/secretary/roster",
+  });
 
   revalidatePath("/welfare");
   revalidatePath("/secretary/roster");
+  revalidatePath("/secretary");
 }

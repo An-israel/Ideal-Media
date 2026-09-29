@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/toaster";
-import { createSubunit, updateSubunit } from "../actions";
+import { Trash2 } from "lucide-react";
+import { createSubunit, updateSubunit, deleteSubunit } from "../actions";
 import type { SubunitCategory } from "@/lib/database.types";
 
 type Subunit = { id: string; name: string; category: SubunitCategory };
@@ -80,7 +81,32 @@ function SubunitRow({ subunit, onSaved }: { subunit: Subunit; onSaved: () => voi
       toast({ title: "Saved", variant: "success" });
       onSaved();
     } catch (e) {
-      toast({ title: "Save failed", description: String(e), variant: "error" });
+      toast({
+        title: "Save failed",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "error",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // There was no way to remove a subunit at all, so a mistyped one was
+  // permanent (AUDIT ADM-5). The action refuses while members or courses still
+  // belong to it, rather than cascading their data away.
+  async function remove() {
+    if (!window.confirm(`Delete the "${subunit.name}" subunit?`)) return;
+    setBusy(true);
+    try {
+      await deleteSubunit(subunit.id);
+      toast({ title: "Subunit deleted", variant: "success" });
+      onSaved();
+    } catch (e) {
+      toast({
+        title: "Could not delete",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "error",
+      });
     } finally {
       setBusy(false);
     }
@@ -104,6 +130,16 @@ function SubunitRow({ subunit, onSaved }: { subunit: Subunit; onSaved: () => voi
       ) : (
         <Badge variant="neutral">{category}</Badge>
       )}
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={remove}
+        disabled={busy}
+        aria-label={`Delete ${subunit.name}`}
+        className="ml-auto text-[var(--danger)]"
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
     </div>
   );
 }

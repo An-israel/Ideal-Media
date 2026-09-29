@@ -32,8 +32,11 @@ export function CocFlow({ title, body }: { title: string; body: string }) {
   const [stage, setStage] = useState<Stage>("read");
   const [scrolledToEnd, setScrolledToEnd] = useState(false);
   const [questions, setQuestions] = useState<DisplayQuestion[]>([]);
+  // Identifies the quiz the server issued; grading is scoped to it.
+  const [issueId, setIssueId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   function onScroll() {
@@ -46,26 +49,47 @@ export function CocFlow({ title, body }: { title: string; body: string }) {
 
   async function startQuiz() {
     setLoading(true);
-    const q = await getQuizQuestions();
-    setQuestions(prepare(q));
-    setAnswers({});
-    setStage("quiz");
-    setLoading(false);
+    setError(null);
+    try {
+      const issued = await getQuizQuestions();
+      setIssueId(issued.issueId);
+      setQuestions(prepare(issued.questions));
+      setAnswers({});
+      setStage("quiz");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not start the quiz.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function submitQuiz() {
+    if (!issueId) return;
     setLoading(true);
+    setError(null);
     const payload = questions.map((q) => ({
       questionId: q.id,
       selectedIndex: answers[q.id],
     }));
-    const result = await gradeQuiz(payload);
-    setLoading(false);
-    if (result.passed) {
-      router.push("/dashboard");
-      router.refresh();
-    } else {
-      setStage("failed");
+    try {
+      const result = await gradeQuiz(issueId, payload);
+      if (result.passed) {
+        router.push("/dashboard");
+        router.refresh();
+        return;
+      }
+      // A refused attempt (expired quiz, rate limit) is not a wrong answer —
+      // show why rather than sending them back to re-read for nothing.
+      if (result.error) {
+        setError(result.error);
+        setIssueId(null);
+      } else {
+        setStage("failed");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not submit the quiz.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -85,6 +109,7 @@ export function CocFlow({ title, body }: { title: string; body: string }) {
           <Button
             onClick={() => {
               setScrolledToEnd(false);
+              setIssueId(null);
               setStage("read");
             }}
           >
@@ -131,7 +156,12 @@ export function CocFlow({ title, body }: { title: string; body: string }) {
               </div>
             </div>
           ))}
-          <Button onClick={submitQuiz} disabled={!allAnswered || loading} className="w-full">
+          {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
+          <Button
+            onClick={submitQuiz}
+            disabled={!allAnswered || loading || !issueId}
+            className="w-full"
+          >
             {loading ? "Checking…" : "Submit answers"}
           </Button>
         </CardContent>
@@ -162,6 +192,7 @@ export function CocFlow({ title, body }: { title: string; body: string }) {
             "Scroll to the bottom to continue."
           )}
         </div>
+        {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
         <Button
           disabled={!scrolledToEnd || loading}
           onClick={startQuiz}

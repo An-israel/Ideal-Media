@@ -1,106 +1,50 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
-import * as XLSX from "xlsx";
-import { ATTENDANCE_PARSE_MODEL } from "@/lib/constants";
-import type { AiProposal, AttendanceStatus } from "@/lib/database.types";
+import {
+  ATTENDANCE_PARSE_MODEL,
+  ATTENDANCE_VISION_MODEL,
+  PARSE_ROSTER_CHUNK,
+  PARSE_MAX_TOKENS,
+} from "@/lib/constants";
+import { chunk } from "@/lib/pagination";
+import { mergeProposals, type RosterMember } from "@/lib/sheets";
+import type { AiProposal } from "@/lib/database.types";
 
-export interface RosterMember {
-  id: string;
-  full_name: string;
-  primary_subunit: string | null;
-}
+// The pure spreadsheet half lives in lib/sheets.ts (no server-only, no API
+// client) so it can be unit tested against real workbook fixtures. Re-exported
+// here so existing imports keep working.
+export {
+  readSheetRows,
+  readRegisterSheets,
+  monthFromHeader,
+  normalizeStatus,
+  dedupeAttendanceRows,
+  isSupportedImageType,
+  SUPPORTED_IMAGE_TYPES,
+  type RegisterSheet,
+  type RosterMember,
+  type AttendanceRow,
+} from "@/lib/sheets";
 
-/** Reads an uploaded .xlsx/.csv buffer into JSON rows, stripping empty rows.
- * Pass `{ raw: false }` to get cells as their displayed strings (handy for
- * dates), or the default `raw: true` to keep native numbers. */
-export function readSheetRows(
-  buffer: Buffer,
-  opts?: { raw?: boolean }
-): Record<string, unknown>[] {
-  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  if (!ws) return [];
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, {
-    defval: "",
-    raw: opts?.raw ?? true,
-  });
-  return rows.filter((r) =>
-    Object.values(r).some((v) => String(v ?? "").trim() !== "")
-  );
-}
-
-/** Reads a sheet as a raw matrix of strings (row 0 = headers). For wide
- * "register" layouts where dates run across the top. */
-export function readSheetMatrix(buffer: Buffer): string[][] {
-  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  if (!ws) return [];
-  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
-  return (aoa as unknown[][]).map((row) => row.map((c) => String(c ?? "")));
-}
-
-const MONTH_RE = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i;
-const DAYNUM_RE = /(\d{1,2})\s*[/.\-]\s*(\d{1,2})/;
-
-/**
- * Scans EVERY sheet in a workbook and returns the one that looks most like an
- * attendance register — a header row containing a Name column plus the most
- * dated/month columns — trimmed so row 0 is that header. Handles real-world
- * files with a blank leading row, a leading index column, and the register on
- * a sheet other than the first. Falls back to the first sheet's matrix.
- */
-export function readBestRegisterMatrix(buffer: Buffer): string[][] {
-  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-  let best: { matrix: string[][]; score: number } | null = null;
-
-  for (const sheetName of wb.SheetNames) {
-    const ws = wb.Sheets[sheetName];
-    if (!ws) continue;
-    const aoa = (XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" }) as unknown[][]).map(
-      (row) => row.map((c) => String(c ?? ""))
-    );
-
-    // Find a header row in the first several rows: has a Name column and at
-    // least one dated or month column.
-    for (let h = 0; h < Math.min(aoa.length, 8); h++) {
-      const row = aoa[h];
-      const hasName = row.some((c) => /name/i.test(c) && !/phone/i.test(c));
-      if (!hasName) continue;
-      const dated = row.filter((c) => DAYNUM_RE.test(c) || (MONTH_RE.test(c) && !/name|phone|subunit/i.test(c))).length;
-      if (dated === 0) continue;
-      if (!best || dated > best.score) {
-        best = { matrix: aoa.slice(h), score: dated };
-      }
-    }
-  }
-
-  if (best) return best.matrix;
-  // Fall back to the first sheet, whole matrix.
-  return readSheetMatrix(buffer);
-}
-
-/** Maps a header like "FEB.", "MARCH", "May" to a month number (1-12), or null. */
-export function monthFromHeader(header: string): number | null {
-  if (DAYNUM_RE.test(header)) return null; // dated column, not a month tally
-  const m = header.match(MONTH_RE);
-  if (!m) return null;
-  const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-  return months.indexOf(m[1].toLowerCase()) + 1;
-}
+type ImageMediaType = (typeof import("@/lib/sheets").SUPPORTED_IMAGE_TYPES)[number];
 
 // Single tool whose input_schema is the exact JSON shape we want back. Forcing
-// this tool (tool_choice) gives strict, parseable JSON instead of prose.
+// this tool (tool_choice) gives strict, parseable JSON instead of prose, and
+// `strict: true` guarantees the input validates against the schema.
 const PROPOSAL_TOOL: Anthropic.Tool = {
   name: "report_attendance_mapping",
   description:
     "Report the mapping of each attendance sheet row to a roster member, plus any rows that could not be matched and roster members absent from the sheet.",
+  strict: true,
   input_schema: {
     type: "object",
+    additionalProperties: false,
     properties: {
       matches: {
         type: "array",
         items: {
           type: "object",
+          additionalProperties: false,
           properties: {
             roster_id: { type: "string", description: "The roster member's id (uuid)." },
             name_on_sheet: { type: "string" },
@@ -114,6 +58,7 @@ const PROPOSAL_TOOL: Anthropic.Tool = {
         type: "array",
         items: {
           type: "object",
+          additionalProperties: false,
           properties: {
             name_on_sheet: { type: "string" },
             raw: { type: "string" },
@@ -126,6 +71,7 @@ const PROPOSAL_TOOL: Anthropic.Tool = {
         type: "array",
         items: {
           type: "object",
+          additionalProperties: false,
           properties: {
             roster_id: { type: "string" },
             full_name: { type: "string" },
@@ -138,6 +84,15 @@ const PROPOSAL_TOOL: Anthropic.Tool = {
   },
 };
 
+const MATCH_INSTRUCTIONS =
+  "Match each sheet row to exactly one roster member by name, tolerating nicknames, " +
+  "reordered first/last names, casing, and minor misspellings. Determine each person's " +
+  "status (present/absent/traveled/excused) from the row (treat ticks/present/P/yes as " +
+  "present; blanks/absent/A as absent). Do not invent members, and never use a roster_id " +
+  "that is not in the roster above. Put rows you cannot confidently match in " +
+  "unmatched_sheet_rows, and roster members with no corresponding row in " +
+  "roster_not_on_sheet. Report your result via the tool.";
+
 function rosterPrompt(roster: RosterMember[]): string {
   return (
     "ROSTER (match against these — use the exact `id` for roster_id):\n" +
@@ -146,6 +101,18 @@ function rosterPrompt(roster: RosterMember[]): string {
 }
 
 function extractProposal(response: Anthropic.Message): AiProposal {
+  // A truncated response yields half-written JSON, which used to surface as a
+  // generic shape error. Name it so the operator sees the real cause.
+  if (response.stop_reason === "max_tokens") {
+    throw new Error(
+      "The sheet is too large to map in one pass — the parser ran out of output room. " +
+        "Split the sheet into smaller files and upload them separately."
+    );
+  }
+  if (response.stop_reason === "refusal") {
+    throw new Error("The parser declined to process this file.");
+  }
+
   const toolBlock = response.content.find((b) => b.type === "tool_use");
   if (!toolBlock || toolBlock.type !== "tool_use") {
     throw new Error("Parser did not return a tool result.");
@@ -166,93 +133,125 @@ function validateProposal(input: unknown): AiProposal {
   return p as AiProposal;
 }
 
+function client() {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "ANTHROPIC_API_KEY is not configured on the server, so sheets cannot be parsed automatically."
+    );
+  }
+  return new Anthropic({ apiKey });
+}
+
 /**
  * Calls Claude (server-side) to map sheet rows to the roster (Section 12).
  * Uses forced tool use for strict JSON. Model is pinned in constants.
+ *
+ * The roster is sent in chunks (AUDIT ATT-3): the whole roster plus the whole
+ * sheet used to go into one prompt with an 8k output cap, so a large team
+ * silently truncated the tool response mid-JSON and the caller fell back to an
+ * empty "review everything by hand" proposal.
  */
 export async function parseAttendance(
   rows: Record<string, unknown>[],
   roster: RosterMember[]
 ): Promise<AiProposal> {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+  if (roster.length === 0) {
+    return { matches: [], unmatched_sheet_rows: [], roster_not_on_sheet: [] };
+  }
 
-  const prompt =
-    "You are mapping a church media team's weekly attendance sheet to the member roster.\n\n" +
-    "ROSTER (match against these — use the exact `id` for roster_id):\n" +
-    JSON.stringify(roster, null, 2) +
-    "\n\nSHEET ROWS (each row represents one person's attendance):\n" +
-    JSON.stringify(rows, null, 2) +
-    "\n\nInstructions: Match each sheet row to exactly one roster member by name, " +
-    "tolerating nicknames, reordered first/last names, casing, and minor misspellings. " +
-    "Determine each person's status (present/absent/traveled/excused) from the row " +
-    "(treat ticks/present/P/yes as present; blanks/absent/A as absent). Do not invent members. " +
-    "Put rows you cannot confidently match in unmatched_sheet_rows, and roster members with no " +
-    "corresponding row in roster_not_on_sheet. Report your result via the tool.";
+  const anthropic = client();
+  const sheetJson = JSON.stringify(rows, null, 2);
+  const groups = chunk(roster, PARSE_ROSTER_CHUNK);
 
-  const response = await client.messages.create({
-    model: ATTENDANCE_PARSE_MODEL,
-    max_tokens: 8000,
-    tools: [PROPOSAL_TOOL],
-    tool_choice: { type: "tool", name: PROPOSAL_TOOL.name },
-    messages: [{ role: "user", content: prompt }],
-  });
+  const parts: AiProposal[] = [];
+  for (const group of groups) {
+    const prompt =
+      "You are mapping a church media team's weekly attendance sheet to the member roster.\n\n" +
+      rosterPrompt(group) +
+      "\n\nSHEET ROWS (each row represents one person's attendance; `__sheet` names the " +
+      "workbook tab the row came from and is not part of the person's data):\n" +
+      sheetJson +
+      "\n\nInstructions: " +
+      MATCH_INSTRUCTIONS;
 
-  return extractProposal(response);
+    const response = await anthropic.messages.create({
+      model: ATTENDANCE_PARSE_MODEL,
+      max_tokens: PARSE_MAX_TOKENS,
+      tools: [PROPOSAL_TOOL],
+      tool_choice: { type: "tool", name: PROPOSAL_TOOL.name },
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    parts.push(extractProposal(response));
+  }
+
+  return mergeProposals(parts, roster);
 }
 
-type ImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+export interface AttendanceImage {
+  base64: string;
+  mediaType: ImageMediaType;
+}
 
 /**
- * Reads attendance from a PHOTO of a sheet/register (Claude vision) and maps it
+ * Reads attendance from PHOTOS of a sheet/register (Claude vision) and maps it
  * to the roster — same strict tool-use JSON as the spreadsheet path. Lets the
  * secretary snap a picture instead of typing up a spreadsheet (Section 12).
+ *
+ * Accepts several images so a multi-page register is one upload (AUDIT ATT-9),
+ * and runs on the stronger vision model since handwriting is the hardest call
+ * we make and the one a human otherwise corrects by hand.
  */
-export async function parseAttendanceImage(
-  base64: string,
-  mediaType: string,
+export async function parseAttendanceImages(
+  images: AttendanceImage[],
   roster: RosterMember[]
 ): Promise<AiProposal> {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
-  const media = (["image/jpeg", "image/png", "image/gif", "image/webp"].includes(mediaType)
-    ? mediaType
-    : "image/jpeg") as ImageMediaType;
+  if (images.length === 0) throw new Error("No image to read.");
+  if (roster.length === 0) {
+    return { matches: [], unmatched_sheet_rows: [], roster_not_on_sheet: [] };
+  }
 
-  const prompt =
-    "The image is a photo of a church media team's attendance sheet or register " +
-    "(it may be printed or handwritten).\n\n" +
-    rosterPrompt(roster) +
-    "\n\nRead every person listed in the photo and match each to exactly one roster " +
-    "member by name, tolerating nicknames, reordered first/last names, casing, and " +
-    "minor misspellings. Determine each person's status from the row (a tick/check/" +
-    "'P'/'present'/highlight means present; blank, dash, 'A', or crossed-out means " +
-    "absent; note 'traveled'/'excused' if written). Do not invent members. Put names " +
-    "you cannot confidently match in unmatched_sheet_rows, and roster members with no " +
-    "row in roster_not_on_sheet. Report your result via the tool.";
+  const anthropic = client();
+  const groups = chunk(roster, PARSE_ROSTER_CHUNK);
 
-  const response = await client.messages.create({
-    model: ATTENDANCE_PARSE_MODEL,
-    max_tokens: 8000,
-    tools: [PROPOSAL_TOOL],
-    tool_choice: { type: "tool", name: PROPOSAL_TOOL.name },
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "image", source: { type: "base64", media_type: media, data: base64 } },
-          { type: "text", text: prompt },
-        ],
-      },
-    ],
-  });
+  const parts: AiProposal[] = [];
+  for (const group of groups) {
+    const prompt =
+      `The ${images.length === 1 ? "image is a photo" : `${images.length} images are photos`} ` +
+      "of a church media team's attendance sheet or register (it may be printed or " +
+      "handwritten). Read every page.\n\n" +
+      rosterPrompt(group) +
+      "\n\nRead every person listed in the photo(s). A tick/check/'P'/'present'/highlight " +
+      "means present; blank, dash, 'A', or crossed-out means absent; note 'traveled'/" +
+      "'excused' if written. " +
+      MATCH_INSTRUCTIONS;
 
-  return extractProposal(response);
-}
+    const response = await anthropic.messages.create({
+      model: ATTENDANCE_VISION_MODEL,
+      max_tokens: PARSE_MAX_TOKENS,
+      tools: [PROPOSAL_TOOL],
+      tool_choice: { type: "tool", name: PROPOSAL_TOOL.name },
+      messages: [
+        {
+          role: "user",
+          content: [
+            ...images.map((img) => ({
+              type: "image" as const,
+              source: {
+                type: "base64" as const,
+                media_type: img.mediaType,
+                data: img.base64,
+              },
+            })),
+            { type: "text" as const, text: prompt },
+          ],
+        },
+      ],
+    });
 
-/** Normalizes a free-text status to our enum (used for unmatched rows). */
-export function normalizeStatus(raw: string): AttendanceStatus {
-  const s = raw.trim().toLowerCase();
-  if (["present", "p", "yes", "y", "✓", "x", "true", "1"].includes(s)) return "present";
-  if (s.startsWith("trav")) return "traveled";
-  if (s.startsWith("exc")) return "excused";
-  return "absent";
+    parts.push(extractProposal(response));
+  }
+
+  return mergeProposals(parts, roster);
 }

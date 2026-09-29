@@ -5,10 +5,13 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   GraduationCap,
+  Headphones,
+  Network,
   Users,
   ClipboardList,
   HeartHandshake,
   Shield,
+  UserRound,
   type LucideIcon,
 } from "lucide-react";
 import type { Role } from "@/lib/constants";
@@ -23,11 +26,17 @@ interface NavItem {
 
 const ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  // Open to every member: department-wide teaching, and the subunit directory.
+  { href: "/training", label: "General Training", icon: Headphones },
   { href: "/courses", label: "My Courses", icon: GraduationCap },
+  { href: "/subunits", label: "Subunits", icon: Network },
   { href: "/leader", label: "Leader", icon: Users, roles: ["subunit_leader", "super_admin"] },
   { href: "/secretary", label: "Secretary", icon: ClipboardList, roles: ["secretary", "super_admin"] },
   { href: "/welfare", label: "Welfare", icon: HeartHandshake, roles: ["welfare", "super_admin"] },
   { href: "/admin", label: "Admin", icon: Shield, roles: ["super_admin"] },
+  // Last, and open to everyone — this is where a leader sets the WhatsApp
+  // number that assignment submissions are routed to.
+  { href: "/profile", label: "My profile", icon: UserRound },
 ];
 
 export function Nav({ roles, onNavigate }: { roles: Role[]; onNavigate?: () => void }) {

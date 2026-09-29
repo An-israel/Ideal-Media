@@ -20,21 +20,26 @@ export function BirthdaysPanel({
             <span className="flex items-center gap-2 text-sm font-medium text-[var(--accent)]">
               <Cake className="h-4 w-4" /> Today&apos;s birthday{today.length > 1 ? "s" : ""}:
             </span>
-            {today.map((p, i) => (
-              <span key={i} className="flex items-center gap-1.5 text-sm">
-                {p.name}
-                {p.whatsapp && (
-                  <a
-                    href={buildWhatsAppLink(p.whatsapp, `Happy birthday, ${p.name}! 🎉 From the media team.`)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[var(--accent)] underline-offset-2 hover:underline"
-                  >
-                    wish 🎉
-                  </a>
-                )}
-              </span>
-            ))}
+            {today.map((p, i) => {
+              const waLink = p.whatsapp
+                ? buildWhatsAppLink(p.whatsapp, `Happy birthday, ${p.name}! 🎉 From the media team.`)
+                : null;
+              return (
+                <span key={i} className="flex items-center gap-1.5 text-sm">
+                  {p.name}
+                  {waLink && (
+                    <a
+                      href={waLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[var(--accent)] underline-offset-2 hover:underline"
+                    >
+                      wish 🎉
+                    </a>
+                  )}
+                </span>
+              );
+            })}
           </CardContent>
         </Card>
       )}

@@ -38,7 +38,3 @@ export async function getSessionRoles(): Promise<SessionRoles | null> {
     cocCompleted: profile?.coc_completed ?? false,
   };
 }
-
-export function hasRole(session: SessionRoles | null, role: Role): boolean {
-  return !!session?.roles.includes(role);
-}

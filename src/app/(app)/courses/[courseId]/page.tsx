@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
+import { MessageCircle, UserRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { resolveCourseInstructor } from "@/lib/course-access";
 import { getSessionRoles } from "@/lib/auth";
 import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,12 +25,17 @@ export default async function CoursePlayerPage({
     .single();
   if (!course) redirect("/courses");
 
-  const { data: enrollment } = await supabase
-    .from("enrollments")
-    .select("status")
-    .eq("course_id", courseId)
-    .eq("user_id", session.userId)
-    .maybeSingle();
+  const [{ data: enrollment }, instructor] = await Promise.all([
+    supabase
+      .from("enrollments")
+      .select("status")
+      .eq("course_id", courseId)
+      .eq("user_id", session.userId)
+      .maybeSingle(),
+    // Who this course belongs to, and whether the submit-on-WhatsApp handoff
+    // will actually work — so the member knows before they finish a module.
+    resolveCourseInstructor(courseId),
+  ]);
 
   const [{ data: modules }, { data: progress }] = await Promise.all([
     supabase
@@ -103,6 +110,29 @@ export default async function CoursePlayerPage({
   return (
     <div>
       <PageHeader title={course.title} description={course.description ?? undefined} />
+
+      {instructor && (
+        <Card className="mb-6">
+          <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-2 py-4">
+            <span className="flex items-center gap-2 text-sm">
+              <UserRound className="h-4 w-4 text-[var(--text-muted)]" />
+              Taught by <b>{instructor.full_name}</b>
+            </span>
+            {instructor.reachableOnWhatsApp ? (
+              <span className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+                <MessageCircle className="h-3 w-3" />
+                Assignments are submitted to them on WhatsApp
+              </span>
+            ) : (
+              <span className="text-xs text-[var(--warning)]">
+                They haven&apos;t added a WhatsApp number yet, so submissions will be recorded
+                in-app only.
+              </span>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <CoursePlayer modules={playerModules} />
     </div>
   );

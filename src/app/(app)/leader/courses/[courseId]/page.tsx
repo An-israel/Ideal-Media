@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveCourseInstructor } from "@/lib/course-access";
 import { CourseEditor, type EditorModule } from "./course-editor";
 
 export default async function EditCoursePage({
@@ -12,10 +14,45 @@ export default async function EditCoursePage({
 
   const { data: course } = await supabase
     .from("courses")
-    .select("id, title, description, is_published")
+    .select("id, title, description, is_published, subunit_id, instructor_id")
     .eq("id", courseId)
     .single();
   if (!course) notFound();
+
+  const admin = createAdminClient();
+
+  // Who can teach this course: leaders of its subunit, plus any super admin.
+  // Read on the admin client because a leader cannot read another leader's
+  // profile row under RLS.
+  const [instructor, { data: subunitLeaders }, { data: superAdmins }] = await Promise.all([
+    resolveCourseInstructor(courseId),
+    admin
+      .from("subunit_members")
+      .select("user_id, profiles(full_name, whatsapp_number)")
+      .eq("subunit_id", course.subunit_id)
+      .eq("role_in_subunit", "leader"),
+    admin.from("user_roles").select("user_id, profiles(full_name, whatsapp_number)").eq("role", "super_admin"),
+  ]);
+
+  type CandidateRow = {
+    user_id: string;
+    profiles: { full_name: string; whatsapp_number: string | null } | null;
+  };
+  const candidateMap = new Map<string, { id: string; name: string; hasWhatsApp: boolean }>();
+  for (const row of [
+    ...((subunitLeaders ?? []) as unknown as CandidateRow[]),
+    ...((superAdmins ?? []) as unknown as CandidateRow[]),
+  ]) {
+    if (!row.profiles) continue;
+    candidateMap.set(row.user_id, {
+      id: row.user_id,
+      name: row.profiles.full_name,
+      hasWhatsApp: !!row.profiles.whatsapp_number,
+    });
+  }
+  const instructorOptions = [...candidateMap.values()].sort((a, b) =>
+    a.name.localeCompare(b.name)
+  );
 
   const { data: modules } = await supabase
     .from("modules")
@@ -61,6 +98,10 @@ export default async function EditCoursePage({
       initialDescription={course.description ?? ""}
       isPublished={course.is_published}
       modules={editorModules}
+      instructorId={course.instructor_id}
+      instructorName={instructor?.full_name ?? null}
+      instructorReachable={instructor?.reachableOnWhatsApp ?? false}
+      instructorOptions={instructorOptions}
     />
   );
 }

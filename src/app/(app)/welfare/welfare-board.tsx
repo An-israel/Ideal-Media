@@ -110,6 +110,12 @@ function FollowupCard({
   const [notes, setNotes] = useState(item.notes);
   const [busy, setBusy] = useState(false);
 
+  // null when the stored number can't be made into a valid international
+  // number, so we hide the button instead of rendering a dead wa.me link.
+  const waLink = item.whatsapp
+    ? buildWhatsAppLink(item.whatsapp, `Hello ${item.memberName}, checking in from the media team.`)
+    : null;
+
   async function save(extra?: { markContacted?: boolean; status?: WelfareStatus }) {
     setBusy(true);
     try {
@@ -224,9 +230,9 @@ function FollowupCard({
           >
             <Check className="h-4 w-4" /> Mark contacted
           </Button>
-          {item.whatsapp && (
+          {waLink && (
             <a
-              href={buildWhatsAppLink(item.whatsapp, `Hello ${item.memberName}, checking in from the media team.`)}
+              href={waLink}
               target="_blank"
               rel="noopener noreferrer"
             >

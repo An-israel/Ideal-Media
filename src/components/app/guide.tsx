@@ -17,10 +17,14 @@ function sectionsFor(roles: Role[]): Section[] {
       emoji: "🎬",
       title: "The basics",
       steps: [
-        "**Dashboard** — your subunits and a performance ring that grows as you do courses and attend service.",
+        "**Dashboard** — your subunits, your training progress, and a performance ring that grows as you do courses and attend service.",
+        "**General Training** 🎧 — teaching for the whole department. Play it here and your progress is tracked automatically; skipping ahead doesn't count.",
         "**My Courses** — learn one module at a time; they unlock in order. 🔓",
-        "Finished a task? Tap **Submit to leader on WhatsApp** — your leader approves it back here.",
-        "The 🔔 bell shows approvals and redo requests.",
+        "**Subunits** — browse every unit, join the ones you serve in, and request their courses.",
+        "In the wrong unit? Open **Subunits**, pick the right one and tap **Make this my primary** — a leader approves the move.",
+        "Every course shows **who teaches it**. Finished a task? Tap **Submit to leader on WhatsApp** — it opens a chat straight to that instructor, and they approve it back here.",
+        "**My profile** 👤 — keep your WhatsApp number there. It's how people reach you.",
+        "The 🔔 bell shows approvals, redo requests and new training.",
       ],
     },
   ];
@@ -30,9 +34,13 @@ function sectionsFor(roles: Role[]): Section[] {
       emoji: "🧑‍🏫",
       title: "Leading",
       steps: [
+        "**Add your WhatsApp number first** (My profile). Members submit assignments by opening a chat with you, so a course can't be published until you have one.",
         "**Build:** Leader → Courses → New course → add modules (content + 1 assignment) → **Publish**.",
+        "Each course names an **Instructor** — your name shows on it and submissions come to you. Hand a course over by changing that field.",
         "**Approvals** — review submissions and course applications.",
-        "**Members** — each person's progress, attendance, performance.",
+        "**Members** — each person's progress, attendance, performance and training.",
+        "**Subunits → Review change requests** — approve someone moving into or out of your unit.",
+        "**General Training → See who's listened** — who in your unit still hasn't been through it.",
       ],
     });
   if (has("secretary") || has("super_admin"))
@@ -41,8 +49,10 @@ function sectionsFor(roles: Role[]): Section[] {
       emoji: "🗂️",
       title: "Secretary",
       steps: [
-        "**Attendance** — pick activity + date, upload a sheet **or snap a photo** 📸. AI maps names → review → **Commit**.",
+        "**Attendance** — pick activity + date, upload a sheet **or snap photos** 📸 (every tab of a workbook is read). AI maps names → review → **Commit**. Committed by mistake? **Reopen** it.",
         "**Roster** — set member status. “Traveled” skips missed-service flags.",
+        "**General Training** 🎧 — add teachings, publish them, and see exactly who has and hasn't listened.",
+        "**Subunits → Review change requests** — approve members moving between units.",
       ],
     });
   if (has("welfare") || has("super_admin"))

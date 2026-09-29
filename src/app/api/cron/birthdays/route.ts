@@ -1,17 +1,36 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notifyRole } from "@/lib/notify";
+import { todayISO } from "@/lib/dates";
 
 /**
  * Daily birthday reminder for the welfare team. Hit by Vercel Cron (see
  * vercel.json). Creates an in-app notification for each welfare member on
  * anyone's birthday — once per day (deduped via app_settings).
  *
- * If CRON_SECRET is set, the request must carry `Authorization: Bearer <secret>`
- * (Vercel Cron sends this automatically). If unset, the route is open.
+ * Three fixes from the audit:
+ *   - This route was unreachable. The proxy matched /api and the request
+ *     carries no Supabase session, so every cron invocation was answered with a
+ *     307 to /login and the handler body never ran (AUDIT NOTIF-1). /api is now
+ *     excluded from the proxy matcher, which is why this route authenticates
+ *     itself below.
+ *   - CRON_SECRET is required, not optional (AUDIT SEC-6). It used to fail
+ *     OPEN: with the variable unset, anyone could spam every welfare member and
+ *     flip the dedup marker to suppress the real run.
+ *   - The day is marked done only AFTER notifications are sent (AUDIT NOTIF-2).
+ *     The marker used to be written first, so a failed insert silently burned
+ *     the day with no retry and no error.
  */
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
-  if (secret && request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!secret) {
+    console.error("[cron/birthdays] CRON_SECRET is not set — refusing to run.");
+    return NextResponse.json(
+      { ok: false, error: "CRON_SECRET is not configured on this deployment." },
+      { status: 503 }
+    );
+  }
+  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
@@ -19,51 +38,65 @@ export async function GET(request: NextRequest) {
   const now = new Date();
   const month = now.getMonth() + 1;
   const day = now.getDate();
-  const todayKey = now.toISOString().slice(0, 10);
+  // Local calendar day, not a UTC slice of an instant.
+  const todayKey = todayISO();
 
-  // Run at most once per day.
+  // Run at most once per day. Claiming the marker up front (with the previous
+  // value as a guard) also stops two concurrent invocations both proceeding.
   const { data: setting } = await admin
     .from("app_settings")
     .select("value")
     .eq("key", "birthday_notified_on")
     .maybeSingle();
-  if (setting && String(setting.value).replace(/"/g, "") === todayKey) {
+
+  const lastRun = setting?.value == null ? null : String(setting.value).replace(/"/g, "");
+  if (lastRun === todayKey) {
     return NextResponse.json({ ok: true, skipped: "already ran today" });
   }
 
-  const { data: celebrants } = await admin
+  const { data: celebrants, error: celebrantsErr } = await admin
     .from("profiles")
     .select("full_name")
     .eq("member_status", "active")
     .eq("birth_month", month)
     .eq("birth_day", day);
 
-  await admin
-    .from("app_settings")
-    .upsert(
-      { key: "birthday_notified_on", value: todayKey, updated_at: now.toISOString() },
-      { onConflict: "key" }
-    );
+  if (celebrantsErr) {
+    // Don't burn the day on a read failure — the next run should retry.
+    console.error("[cron/birthdays] could not read celebrants:", celebrantsErr.message);
+    return NextResponse.json({ ok: false, error: celebrantsErr.message }, { status: 500 });
+  }
+
+  const markDone = async () => {
+    const { error } = await admin
+      .from("app_settings")
+      .upsert(
+        { key: "birthday_notified_on", value: todayKey, updated_at: now.toISOString() },
+        { onConflict: "key" }
+      );
+    if (error) console.error("[cron/birthdays] could not record the run:", error.message);
+  };
 
   if (!celebrants || celebrants.length === 0) {
+    await markDone();
     return NextResponse.json({ ok: true, birthdays: 0 });
   }
 
   const names = celebrants.map((c) => c.full_name).join(", ");
-  const { data: welfare } = await admin.from("user_roles").select("user_id").eq("role", "welfare");
 
-  for (const w of welfare ?? []) {
-    await admin.from("notifications").insert({
-      user_id: w.user_id,
-      type: "birthday_today",
-      title: "🎂 Birthday today",
-      body:
-        celebrants.length === 1
-          ? `It's ${names}'s birthday today — reach out and celebrate them!`
-          : `Birthdays today: ${names}. Reach out and celebrate them!`,
-      link: "/welfare",
-    });
-  }
+  // One batched insert for the whole welfare team, rather than a fresh admin
+  // client and round trip per member (AUDIT NOTIF-4).
+  await notifyRole("welfare", {
+    type: "birthday_today",
+    title: "🎂 Birthday today",
+    body:
+      celebrants.length === 1
+        ? `It's ${names}'s birthday today — reach out and celebrate them!`
+        : `Birthdays today: ${names}. Reach out and celebrate them!`,
+    link: "/welfare",
+  });
 
-  return NextResponse.json({ ok: true, birthdays: celebrants.length, notified: (welfare ?? []).length });
+  await markDone();
+
+  return NextResponse.json({ ok: true, birthdays: celebrants.length });
 }

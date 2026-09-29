@@ -41,23 +41,38 @@ export function UploadForm({ activities }: { activities: { id: string; name: str
   const router = useRouter();
   const [activityId, setActivityId] = useState(activities[0]?.id ?? "");
   const [serviceDate, setServiceDate] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  // Several files so a multi-page paper register is one upload (AUDIT ATT-9).
+  const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file || !activityId || !serviceDate) return;
+    if (files.length === 0 || !activityId || !serviceDate) return;
     setLoading(true);
     try {
-      const prepared = await maybeShrinkImage(file);
+      const prepared = await Promise.all(files.map(maybeShrinkImage));
       const fd = new FormData();
-      fd.set("file", prepared);
+      for (const f of prepared) fd.append("file", f);
       fd.set("activityId", activityId);
       fd.set("serviceDate", serviceDate);
-      const { uploadId } = await createAndParseUpload(fd);
+      const { uploadId, parseError } = await createAndParseUpload(fd);
+      // Automatic reading can fail while the upload itself succeeds. Say so,
+      // rather than dropping the secretary onto an empty review screen with no
+      // explanation (AUDIT ATT-2).
+      if (parseError) {
+        toast({
+          title: "Couldn't read it automatically",
+          description: `${parseError} You can still map names by hand below.`,
+          variant: "error",
+        });
+      }
       router.push(`/secretary/attendance/${uploadId}`);
     } catch (err) {
-      toast({ title: "Upload failed", description: String(err), variant: "error" });
+      toast({
+        title: "Upload failed",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "error",
+      });
       setLoading(false);
     }
   }
@@ -90,20 +105,27 @@ export function UploadForm({ activities }: { activities: { id: string; name: str
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="file">Sheet or photo</Label>
+            <Label htmlFor="file">Sheet or photo(s)</Label>
             <Input
               id="file"
               type="file"
+              multiple
               accept=".xlsx,.csv,image/*"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
               required
             />
             <p className="text-xs text-[var(--text-muted)]">
-              Upload a <b>.xlsx/.csv</b> spreadsheet, or <b>snap/upload a photo</b> of a
-              paper register — on a phone you can take the picture right here. 📸
+              Upload a <b>.xlsx/.csv</b> spreadsheet (every tab is read), or{" "}
+              <b>snap/upload photos</b> of a paper register — on a phone you can take the
+              pictures right here. 📸 Multi-page register? Select all the pages at once.
             </p>
+            {files.length > 1 && (
+              <p className="text-xs text-[var(--text-muted)]">
+                {files.length} files selected.
+              </p>
+            )}
           </div>
-          <Button type="submit" className="w-full" disabled={loading || !file}>
+          <Button type="submit" className="w-full" disabled={loading || files.length === 0}>
             <Upload className="h-4 w-4" />
             {loading ? "Reading with AI…" : "Upload & read"}
           </Button>

@@ -37,6 +37,10 @@ export type AttendanceStatus = "present" | "absent" | "traveled" | "excused";
 export type AttendanceSource = "sheet_upload" | "manual";
 export type WelfareReason = "new_member" | "missed_service" | "traveled" | "inactive";
 export type WelfareStatus = "pending" | "in_progress" | "contacted" | "resolved";
+export type TeachingMediaType = "audio" | "video" | "link";
+export type TeachingCompletionSource = "playback" | "manual";
+export type SubunitRequestKind = "change_primary";
+export type SubunitRequestStatus = "pending" | "approved" | "rejected" | "cancelled";
 
 export type Profile = {
   id: string;
@@ -54,7 +58,10 @@ export type Profile = {
   member_origin: string;
   birth_month: number | null;
   birth_day: number | null;
+  /** Version of the code of conduct this member accepted (null = none yet). */
+  coc_version_accepted: number | null;
   created_at: string;
+  updated_at: string | null;
 };
 
 export type Subunit = {
@@ -80,9 +87,16 @@ export type Course = {
   subunit_id: string;
   title: string;
   description: string | null;
-  created_by: string;
+  /** Null once the author's account is deleted (ON DELETE SET NULL). */
+  created_by: string | null;
+  /**
+   * Who teaches this course and receives assignment submissions over WhatsApp.
+   * Defaults to created_by; editable by a leader of the course's subunit.
+   */
+  instructor_id: string | null;
   is_published: boolean;
   created_at: string;
+  updated_at: string | null;
 };
 
 export type Module = {
@@ -95,6 +109,7 @@ export type Module = {
   content_urls: string[];
   content_body: string | null;
   created_at: string;
+  updated_at: string | null;
 };
 
 export type Assignment = {
@@ -124,7 +139,10 @@ export type ModuleProgress = {
   approved_at: string | null;
   approved_by: string | null;
   rejection_note: string | null;
+  /** How many times this submission has been sent back (AUDIT CRS-6). */
+  rejection_count: number;
   created_at: string;
+  updated_at: string | null;
 };
 
 export type CodeOfConduct = {
@@ -152,6 +170,21 @@ export type CocAttempt = {
   score: number;
   total: number;
   attempted_at: string;
+  /** Which COC version this attempt was against. */
+  coc_version: number | null;
+  created_at: string;
+};
+
+/**
+ * A quiz the server issued to a member. Grading is scoped to one of these and
+ * consumes it, so the question set and the denominator are server-owned
+ * (AUDIT SEC-4).
+ */
+export type CocQuizIssue = {
+  id: string;
+  user_id: string;
+  question_ids: string[];
+  consumed: boolean;
   created_at: string;
 };
 
@@ -166,13 +199,16 @@ export type Activity = {
 
 export type AttendanceUpload = {
   id: string;
-  uploaded_by: string;
+  /** Null once the uploader's account is deleted (ON DELETE SET NULL). */
+  uploaded_by: string | null;
   original_filename: string;
   raw_storage_path: string;
   activity_id: string;
   service_date: string;
   status: UploadStatus;
   ai_proposal: AiProposal | null;
+  /** Why automatic parsing failed, if it did (AUDIT ATT-2). */
+  parse_error: string | null;
   committed_at: string | null;
   created_at: string;
 };
@@ -206,6 +242,72 @@ export type WelfareFollowup = {
   assigned_to: string | null;
   last_contact_at: string | null;
   created_at: string;
+  updated_at: string | null;
+};
+
+/** A grouping of teachings, e.g. "Essence of Media". */
+export type TrainingSeries = {
+  id: string;
+  title: string;
+  description: string | null;
+  position: number;
+  is_published: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
+export type TrainingTeaching = {
+  id: string;
+  series_id: string;
+  position: number;
+  title: string;
+  description: string | null;
+  media_type: TeachingMediaType;
+  /** Object key inside the private `training` bucket (uploads). */
+  storage_path: string | null;
+  /** Used instead of storage_path for a link-type teaching. */
+  external_url: string | null;
+  /** Filled in from the media itself the first time someone plays it. */
+  duration_seconds: number | null;
+  is_published: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
+/**
+ * One row per member per teaching. `listened_seconds` counts only real
+ * playback, so seeking to the end doesn't count as listening.
+ */
+export type TeachingProgress = {
+  id: string;
+  user_id: string;
+  teaching_id: string;
+  listened_seconds: number;
+  furthest_seconds: number;
+  completed: boolean;
+  completed_at: string | null;
+  completion_source: TeachingCompletionSource | null;
+  first_opened_at: string;
+  last_activity_at: string;
+  created_at: string;
+};
+
+/** A request to change PRIMARY subunit (secondary joins are instant). */
+export type SubunitRequest = {
+  id: string;
+  user_id: string;
+  subunit_id: string;
+  current_subunit_id: string | null;
+  kind: SubunitRequestKind;
+  status: SubunitRequestStatus;
+  reason: string | null;
+  decided_by: string | null;
+  decided_at: string | null;
+  decision_note: string | null;
+  created_at: string;
+  updated_at: string | null;
 };
 
 export type Notification = {
@@ -273,16 +375,43 @@ export type Database = {
       code_of_conduct: TableDef<CodeOfConduct>;
       coc_questions: TableDef<CocQuestion>;
       coc_attempts: TableDef<CocAttempt>;
+      coc_quiz_issues: TableDef<CocQuizIssue>;
       activities: TableDef<Activity>;
       attendance_uploads: TableDef<AttendanceUpload>;
       attendance_records: TableDef<AttendanceRecord>;
       monthly_attendance_summary: TableDef<MonthlyAttendanceSummary>;
+      training_series: TableDef<TrainingSeries>;
+      training_teachings: TableDef<TrainingTeaching>;
+      teaching_progress: TableDef<TeachingProgress>;
+      subunit_requests: TableDef<SubunitRequest>;
       welfare_followups: TableDef<WelfareFollowup>;
       notifications: TableDef<Notification>;
       app_settings: TableDef<AppSetting>;
     };
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    Functions: {
+      publish_coc_version: {
+        Args: { p_title: string; p_body: string };
+        Returns: number;
+      };
+      move_module: {
+        Args: { p_module_id: string; p_direction: "up" | "down" };
+        Returns: undefined;
+      };
+      subunit_member_counts: {
+        Args: Record<string, never>;
+        Returns: { subunit_id: string; member_count: number }[];
+      };
+      course_instructors: {
+        Args: Record<string, never>;
+        Returns: {
+          course_id: string;
+          instructor_id: string | null;
+          instructor_name: string | null;
+          has_whatsapp: boolean | null;
+        }[];
+      };
+    };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
   };

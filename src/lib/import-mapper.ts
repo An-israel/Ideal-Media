@@ -2,6 +2,27 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { ATTENDANCE_PARSE_MODEL } from "@/lib/constants";
 
+/**
+ * Column-mapping results, memoised per server instance on the header set
+ * (AUDIT PERF-5). Sheet layouts rarely change between imports, so re-asking
+ * the model every time is latency and spend on a fully cacheable answer.
+ */
+const mapCache = new Map<string, unknown>();
+
+function cacheKey(kind: string, headers: string[]): string {
+  return `${kind}:${[...headers].map((h) => h.trim().toLowerCase()).sort().join("|")}`;
+}
+
+function client() {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "ANTHROPIC_API_KEY is not configured on the server, so columns cannot be mapped automatically."
+    );
+  }
+  return new Anthropic({ apiKey });
+}
+
 export interface MemberColumnMap {
   full_name: string;
   email: string;
@@ -34,14 +55,21 @@ const MAP_TOOL: Anthropic.Tool = {
 /**
  * Uses Claude to map a messy spreadsheet's columns to our member fields, so the
  * secretary doesn't have to rename headers. Returns the exact header text for
- * each field (or "" if the sheet has no matching column). Falls back to {} on
- * any failure so the caller can use header heuristics instead.
+ * each field (or "" if the sheet has no matching column).
+ *
+ * THROWS on failure — the caller catches and falls back to header heuristics.
+ * (The docstring used to claim it returned {} on any failure, which it never
+ * did; callers that trusted that would have crashed.)
  */
 export async function mapMemberColumns(
   headers: string[],
   sampleRows: Record<string, unknown>[]
 ): Promise<MemberColumnMap> {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+  const key = cacheKey("member", headers);
+  const cached = mapCache.get(key);
+  if (cached) return cached as MemberColumnMap;
+
+  const anthropic = client();
 
   const prompt =
     "A spreadsheet of church media team members has these column headers:\n" +
@@ -52,7 +80,7 @@ export async function mapMemberColumns(
     "the header exactly, including case and spacing). If no column fits a field, use " +
     "an empty string. Ignore every other column. Report via the tool.";
 
-  const res = await client.messages.create({
+  const res = await anthropic.messages.create({
     model: ATTENDANCE_PARSE_MODEL,
     max_tokens: 1024,
     tools: [MAP_TOOL],
@@ -63,7 +91,7 @@ export async function mapMemberColumns(
   const block = res.content.find((b) => b.type === "tool_use");
   if (!block || block.type !== "tool_use") throw new Error("No column mapping returned.");
   const m = block.input as Partial<MemberColumnMap>;
-  return {
+  const mapped: MemberColumnMap = {
     full_name: String(m.full_name ?? ""),
     email: String(m.email ?? ""),
     phone: String(m.phone ?? ""),
@@ -72,6 +100,8 @@ export async function mapMemberColumns(
     secondary_subunits: String(m.secondary_subunits ?? ""),
     birthday: String(m.birthday ?? ""),
   };
+  mapCache.set(key, mapped);
+  return mapped;
 }
 
 /** Same idea as mapMemberColumns, for a past-attendance sheet (one row per record). */
@@ -103,7 +133,11 @@ export async function mapAttendanceColumns(
   headers: string[],
   sampleRows: Record<string, unknown>[]
 ): Promise<AttendanceColumnMap> {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+  const key = cacheKey("attendance", headers);
+  const cached = mapCache.get(key);
+  if (cached) return cached as AttendanceColumnMap;
+
+  const anthropic = client();
 
   const prompt =
     "A spreadsheet of past attendance (one row per person per service) has these headers:\n" +
@@ -114,7 +148,7 @@ export async function mapAttendanceColumns(
     "exactly). If no column fits, use an empty string. Ignore every other column. " +
     "Report via the tool.";
 
-  const res = await client.messages.create({
+  const res = await anthropic.messages.create({
     model: ATTENDANCE_PARSE_MODEL,
     max_tokens: 1024,
     tools: [ATTENDANCE_MAP_TOOL],
@@ -125,12 +159,14 @@ export async function mapAttendanceColumns(
   const block = res.content.find((b) => b.type === "tool_use");
   if (!block || block.type !== "tool_use") throw new Error("No column mapping returned.");
   const m = block.input as Partial<AttendanceColumnMap>;
-  return {
+  const mapped: AttendanceColumnMap = {
     email: String(m.email ?? ""),
     name: String(m.name ?? ""),
     date: String(m.date ?? ""),
     status: String(m.status ?? ""),
   };
+  mapCache.set(key, mapped);
+  return mapped;
 }
 
 const SUBUNIT_MAP_TOOL: Anthropic.Tool = {
@@ -158,14 +194,21 @@ const SUBUNIT_MAP_TOOL: Anthropic.Tool = {
 /**
  * Maps the messy subunit/unit values found in a sheet to our existing subunit
  * names (e.g. "Utility (Technical in Media)" → "Utility (Videography &
- * Technical)"). Returns a lowercase-value → existing-name map. Best-effort.
+ * Technical)"). Returns a lowercase-value → existing-name map.
+ *
+ * Returns {} when the model doesn't answer with the tool, but THROWS on an API
+ * failure — callers catch and fall back to heuristic matching.
  */
 export async function mapSubunitValues(
   values: string[],
   existingSubunits: string[]
 ): Promise<Record<string, string>> {
   if (values.length === 0) return {};
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+  const key = cacheKey("subunits", [...values, ...existingSubunits]);
+  const cached = mapCache.get(key);
+  if (cached) return cached as Record<string, string>;
+
+  const anthropic = client();
 
   const prompt =
     "These are the only existing subunits (choose from these EXACT names):\n" +
@@ -176,7 +219,7 @@ export async function mapSubunitValues(
     "exact existing name). Use an empty string only if truly none is reasonable. " +
     "Report via the tool.";
 
-  const res = await client.messages.create({
+  const res = await anthropic.messages.create({
     model: ATTENDANCE_PARSE_MODEL,
     max_tokens: 2048,
     tools: [SUBUNIT_MAP_TOOL],
@@ -191,5 +234,6 @@ export async function mapSubunitValues(
   for (const item of data.mappings ?? []) {
     if (item.value) out[item.value.trim().toLowerCase()] = item.subunit ?? "";
   }
+  mapCache.set(key, out);
   return out;
 }

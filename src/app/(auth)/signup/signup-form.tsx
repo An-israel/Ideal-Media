@@ -86,6 +86,16 @@ export function SignupForm({
       setError(result.error ?? "Something went wrong.");
       return;
     }
+    // When the deployment requires email confirmation there is no session yet,
+    // so don't try to sign in — tell them to check their inbox (AUDIT AUTH-4).
+    if (result.needsEmailConfirmation) {
+      setLoading(false);
+      setError(
+        "Account created. Check your email for a confirmation link, then sign in."
+      );
+      router.push("/login");
+      return;
+    }
     // Sign in with the new credentials, then head to the COC gate.
     const supabase = createClient();
     const { error: signInErr } = await supabase.auth.signInWithPassword({

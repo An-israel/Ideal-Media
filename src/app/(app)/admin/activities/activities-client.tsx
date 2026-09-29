@@ -9,7 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/toaster";
-import { createActivity, updateActivity, setMissedThreshold } from "../actions";
+import { Trash2 } from "lucide-react";
+import {
+  createActivity,
+  updateActivity,
+  deleteActivity,
+  setMissedThreshold,
+} from "../actions";
 
 type Activity = {
   id: string;
@@ -133,7 +139,32 @@ function ActivityRow({ activity, onSaved }: { activity: Activity; onSaved: () =>
       toast({ title: "Saved", variant: "success" });
       onSaved();
     } catch (e) {
-      toast({ title: "Save failed", description: String(e), variant: "error" });
+      toast({
+        title: "Save failed",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "error",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // A mistyped activity used to be permanent and kept appearing in the upload
+  // dropdown forever (AUDIT ADM-5). The action refuses once there is attendance
+  // history, so the history can't be deleted out from under you.
+  async function remove() {
+    if (!window.confirm(`Delete the "${activity.name}" activity?`)) return;
+    setBusy(true);
+    try {
+      await deleteActivity(activity.id);
+      toast({ title: "Activity deleted", variant: "success" });
+      onSaved();
+    } catch (e) {
+      toast({
+        title: "Could not delete",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "error",
+      });
     } finally {
       setBusy(false);
     }
@@ -155,6 +186,16 @@ function ActivityRow({ activity, onSaved }: { activity: Activity; onSaved: () =>
       ) : (
         activity.is_attendance_signal && <Badge variant="default">signal</Badge>
       )}
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={remove}
+        disabled={busy}
+        aria-label={`Delete ${activity.name}`}
+        className="ml-auto text-[var(--danger)]"
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
     </div>
   );
 }

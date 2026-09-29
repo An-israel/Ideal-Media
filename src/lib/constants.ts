@@ -17,6 +17,13 @@ export const COC_PASS_THRESHOLD = 1.0;
 /** Number of questions pulled per COC quiz attempt (Section 6). */
 export const COC_QUIZ_SIZE = 4;
 
+/**
+ * COC attempt rate limit. The quiz is 100%-to-pass from a small bank with
+ * reshuffled options, so unlimited retries are themselves a bypass.
+ */
+export const COC_MAX_ATTEMPTS_PER_WINDOW = 5;
+export const COC_ATTEMPT_WINDOW_MINUTES = 15;
+
 /** Guidance: warn (don't block) below this many modules per course (Section 8). */
 export const MIN_MODULES_GUIDANCE = 7;
 
@@ -24,8 +31,72 @@ export const MIN_MODULES_GUIDANCE = 7;
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 export const ACCEPTED_UPLOAD_EXT = [".xlsx", ".csv"] as const;
 
-/** Anthropic model for attendance parsing (Section 12). Pinned. */
-export const ATTENDANCE_PARSE_MODEL = "claude-sonnet-4-6";
+/**
+ * Anthropic model for attendance parsing and column mapping (Section 12).
+ * Pinned deliberately so parsing behaviour only changes when we change it.
+ *
+ * Sonnet 5 supersedes the previous pin (Sonnet 4.6) and is both cheaper
+ * ($2/$10 vs $3/$15 per MTok) and more capable.
+ */
+export const ATTENDANCE_PARSE_MODEL = "claude-sonnet-5";
+
+/**
+ * Model for reading a PHOTO of a handwritten register. Vision on messy
+ * handwriting is the hardest call we make and the one a human has to correct
+ * by hand, so it runs on the stronger model.
+ */
+export const ATTENDANCE_VISION_MODEL = "claude-opus-5";
+
+/**
+ * Max members sent to the parser in one request. The whole roster used to go
+ * into a single prompt with an 8k output cap, so a large team silently
+ * truncated the tool response mid-JSON (AUDIT ATT-3).
+ */
+export const PARSE_ROSTER_CHUNK = 120;
+
+/** Output cap per parse request. Generous — the matches array is the bulk. */
+export const PARSE_MAX_TOKENS = 16000;
+
+/**
+ * Page size for paginated reads. PostgREST caps an unbounded select() at 1000
+ * rows and returns no error, so anything that must see every row pages through
+ * with this (AUDIT PERF-2).
+ */
+export const PAGE_SIZE = 1000;
+
+/** A member belongs to one primary subunit plus up to three more. */
+export const MAX_SUBUNITS_PER_MEMBER = 4;
+
+/**
+ * Default country calling code for phone numbers stored in local form.
+ * wa.me requires a full international number, so "08031234567" has to become
+ * "2348031234567" or the link silently fails (AUDIT CRS-3). Nigeria (+234).
+ */
+export const DEFAULT_COUNTRY_CODE = "234";
+
+/**
+ * General training.
+ *
+ * A teaching counts as listened once this fraction of it has actually been
+ * PLAYED (not merely seeked past) — 90% allows for skipping an intro or
+ * trailing silence without letting someone drag the slider to the end.
+ */
+export const TEACHING_COMPLETE_FRACTION = 0.9;
+
+/** How often the player reports progress back to the server, in seconds. */
+export const TEACHING_PROGRESS_INTERVAL_SECONDS = 15;
+
+/** Lifetime of a signed media URL. Long enough for a full teaching. */
+export const TRAINING_SIGNED_URL_SECONDS = 60 * 60 * 4;
+
+/** Upload guardrail for a teaching's audio/video file. */
+export const MAX_TEACHING_UPLOAD_BYTES = 200 * 1024 * 1024;
+
+export const ACCEPTED_TEACHING_AUDIO = [".m4a", ".mp3", ".aac", ".wav", ".ogg"] as const;
+export const ACCEPTED_TEACHING_VIDEO = [".mp4", ".webm", ".mov", ".m4v"] as const;
+
+/** Welfare escalation ceiling (welfare_followups.level is checked 1..3). */
+export const MAX_WELFARE_LEVEL = 3;
 
 export const ROLES = [
   "member",
@@ -45,8 +116,3 @@ export const MEMBER_STATUSES = [
 ] as const;
 export type MemberStatus = (typeof MEMBER_STATUSES)[number];
 
-/** Seed subunits (Section 4). Keep slugs stable; used for routing/lookup. */
-export const SEED_SUBUNITS = {
-  primary: ["Photography", "Projection", "Production", "Social Media", "Utility (Videography & Technical)"],
-  secondary: ["Graphic Design", "Video Editing", "Welfare", "Secretary", "Publication"],
-} as const;

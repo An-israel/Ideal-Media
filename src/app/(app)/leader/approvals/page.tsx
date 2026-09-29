@@ -1,5 +1,8 @@
+import Link from "next/link";
+import { ClipboardCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/app/page-header";
+import { Button } from "@/components/ui/button";
 import { ApprovalsClient, type SubmissionItem, type ApplicationItem } from "./approvals-client";
 
 export default async function ApprovalsPage() {
@@ -51,8 +54,19 @@ export default async function ApprovalsPage() {
     <div>
       <PageHeader
         title="Approvals"
-        description="Assignment submissions and secondary-course applications for your subunit."
+        description="Assignment submissions and course applications for your subunit."
       />
+
+      {/* Subunit moves are reviewed on their own page — link it so a leader
+          doesn't have to know the URL. */}
+      <div className="mb-4">
+        <Link href="/subunits/requests">
+          <Button variant="outline" size="sm">
+            <ClipboardCheck className="h-4 w-4" /> Subunit change requests
+          </Button>
+        </Link>
+      </div>
+
       <ApprovalsClient submissions={subs} applications={apps} />
     </div>
   );

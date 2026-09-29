@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { CheckCircle2, Circle, Clock, RotateCcw } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getMemberPerformance } from "@/lib/queries";
+import { getTrainingForMember } from "@/lib/training";
+import { fetchAllRows } from "@/lib/pagination";
 import { PageHeader } from "@/components/app/page-header";
 import { PerformanceRing } from "@/components/app/performance-ring";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,7 +33,7 @@ export default async function MemberDetailPage({
     .single();
   if (!profile) notFound();
 
-  const [{ parts, composite }, { data: enrollments }, { data: progress }, { data: attendance }] =
+  const [{ parts, composite }, { data: enrollments }, progress, { data: attendance }] =
     await Promise.all([
       getMemberPerformance(supabase, userId),
       supabase
@@ -39,7 +41,15 @@ export default async function MemberDetailPage({
         .select("course_id, courses(id, title)")
         .eq("user_id", userId)
         .eq("status", "enrolled"),
-      supabase.from("module_progress").select("module_id, status").eq("user_id", userId),
+      // Paged: a member with a long course history would have been cut off at
+      // 1000 rows with no error, quietly mis-drawing their progress (PERF-2).
+      fetchAllRows<{ module_id: string; status: string }>((from, to) =>
+        supabase
+          .from("module_progress")
+          .select("module_id, status")
+          .eq("user_id", userId)
+          .range(from, to)
+      ),
       supabase
         .from("attendance_records")
         .select("status, service_date, activities(name)")
@@ -49,8 +59,15 @@ export default async function MemberDetailPage({
     ]);
 
   const progressMap = new Map(
-    (progress ?? []).map((p) => [p.module_id, p.status as ModuleProgressStatus])
+    progress.map((p) => [p.module_id, p.status as ModuleProgressStatus])
   );
+
+  // General Training progress for this member. RLS on teaching_progress lets a
+  // leader read their own members' rows (leads_member), so this returns real
+  // data for a leader and nothing for anyone who shouldn't see it.
+  const trainingSeries = await getTrainingForMember(supabase, userId);
+  const trainingTeachings = trainingSeries.flatMap((t) => t.teachings);
+  const trainingDone = trainingTeachings.filter((t) => t.completed).length;
 
   type EnrollRow = { course_id: string; courses: { id: string; title: string } | null };
   const courseIds = ((enrollments ?? []) as unknown as EnrollRow[])
@@ -174,6 +191,34 @@ export default async function MemberDetailPage({
           </p>
         </CardContent>
       </Card>
+
+      {trainingTeachings.length > 0 && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-base">
+              General Training · {trainingDone}/{trainingTeachings.length} listened
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            {trainingTeachings.map((t) => (
+              <div key={t.id} className="flex items-center justify-between gap-3 text-sm">
+                <span className="min-w-0 truncate text-[var(--text-muted)]">
+                  {t.seriesTitle} · {t.position}. {t.title}
+                </span>
+                {t.completed ? (
+                  <Badge variant="success">
+                    {t.completedManually ? "self-marked" : "listened"}
+                  </Badge>
+                ) : t.percent > 0 ? (
+                  <Badge variant="warning">{t.percent}%</Badge>
+                ) : (
+                  <Badge variant="neutral">not started</Badge>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
