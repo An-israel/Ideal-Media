@@ -37,6 +37,10 @@ export type AttendanceStatus = "present" | "absent" | "traveled" | "excused";
 export type AttendanceSource = "sheet_upload" | "manual";
 export type WelfareReason = "new_member" | "missed_service" | "traveled" | "inactive";
 export type WelfareStatus = "pending" | "in_progress" | "contacted" | "resolved";
+export type TeachingMediaType = "audio" | "video" | "link";
+export type TeachingCompletionSource = "playback" | "manual";
+export type SubunitRequestKind = "change_primary";
+export type SubunitRequestStatus = "pending" | "approved" | "rejected" | "cancelled";
 
 export type Profile = {
   id: string;
@@ -236,6 +240,71 @@ export type WelfareFollowup = {
   updated_at: string | null;
 };
 
+/** A grouping of teachings, e.g. "Essence of Media". */
+export type TrainingSeries = {
+  id: string;
+  title: string;
+  description: string | null;
+  position: number;
+  is_published: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
+export type TrainingTeaching = {
+  id: string;
+  series_id: string;
+  position: number;
+  title: string;
+  description: string | null;
+  media_type: TeachingMediaType;
+  /** Object key inside the private `training` bucket (uploads). */
+  storage_path: string | null;
+  /** Used instead of storage_path for a link-type teaching. */
+  external_url: string | null;
+  /** Filled in from the media itself the first time someone plays it. */
+  duration_seconds: number | null;
+  is_published: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
+/**
+ * One row per member per teaching. `listened_seconds` counts only real
+ * playback, so seeking to the end doesn't count as listening.
+ */
+export type TeachingProgress = {
+  id: string;
+  user_id: string;
+  teaching_id: string;
+  listened_seconds: number;
+  furthest_seconds: number;
+  completed: boolean;
+  completed_at: string | null;
+  completion_source: TeachingCompletionSource | null;
+  first_opened_at: string;
+  last_activity_at: string;
+  created_at: string;
+};
+
+/** A request to change PRIMARY subunit (secondary joins are instant). */
+export type SubunitRequest = {
+  id: string;
+  user_id: string;
+  subunit_id: string;
+  current_subunit_id: string | null;
+  kind: SubunitRequestKind;
+  status: SubunitRequestStatus;
+  reason: string | null;
+  decided_by: string | null;
+  decided_at: string | null;
+  decision_note: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
 export type Notification = {
   id: string;
   user_id: string;
@@ -306,6 +375,10 @@ export type Database = {
       attendance_uploads: TableDef<AttendanceUpload>;
       attendance_records: TableDef<AttendanceRecord>;
       monthly_attendance_summary: TableDef<MonthlyAttendanceSummary>;
+      training_series: TableDef<TrainingSeries>;
+      training_teachings: TableDef<TrainingTeaching>;
+      teaching_progress: TableDef<TeachingProgress>;
+      subunit_requests: TableDef<SubunitRequest>;
       welfare_followups: TableDef<WelfareFollowup>;
       notifications: TableDef<Notification>;
       app_settings: TableDef<AppSetting>;
@@ -319,6 +392,10 @@ export type Database = {
       move_module: {
         Args: { p_module_id: string; p_direction: "up" | "down" };
         Returns: undefined;
+      };
+      subunit_member_counts: {
+        Args: Record<string, never>;
+        Returns: { subunit_id: string; member_count: number }[];
       };
     };
     Enums: { [_ in never]: never };

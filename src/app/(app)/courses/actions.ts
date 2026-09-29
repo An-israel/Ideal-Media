@@ -30,7 +30,7 @@ export async function applyForCourse(courseId: string, reason: string): Promise<
 
   const { data: course } = await admin
     .from("courses")
-    .select("id, title, is_published, subunit_id, subunits(category)")
+    .select("id, title, is_published, subunit_id, subunits(name)")
     .eq("id", courseId)
     .maybeSingle();
   if (!course) return { ok: false, error: "That course no longer exists." };
@@ -38,12 +38,24 @@ export async function applyForCourse(courseId: string, reason: string): Promise<
     return { ok: false, error: "That course isn't open for applications yet." };
   }
 
-  const category = (course as unknown as { subunits: { category: string } | null }).subunits
-    ?.category;
-  if (category !== "secondary") {
+  // The member must belong to the course's subunit — join it first, then
+  // request its courses. This used to be restricted to SECONDARY-category
+  // subunits only, which meant someone who joined a primary subunit as an
+  // additional member could see its courses on the browse page and had no way
+  // to ask for them.
+  const { data: membership } = await admin
+    .from("subunit_members")
+    .select("membership_type")
+    .eq("user_id", user.id)
+    .eq("subunit_id", course.subunit_id)
+    .maybeSingle();
+  if (!membership) {
+    const subunitName =
+      (course as unknown as { subunits: { name: string } | null }).subunits?.name ??
+      "that subunit";
     return {
       ok: false,
-      error: "Primary-subunit courses are assigned automatically — there's nothing to apply for.",
+      error: `Join ${subunitName} first, then you can request its courses.`,
     };
   }
 

@@ -11,7 +11,7 @@ import { DEFAULT_MISSED_SERVICE_THRESHOLD, MAX_WELFARE_LEVEL } from "@/lib/const
  * `recentDates` became `[]`, `[].every(...)` is `true` by definition, and so
  * EVERY active member was flagged on the next attendance commit.
  */
-export async function getMissedThreshold(
+async function getMissedThreshold(
   admin: ReturnType<typeof createAdminClient>
 ): Promise<number> {
   const { data: setting } = await admin

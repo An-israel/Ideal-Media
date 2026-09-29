@@ -15,7 +15,6 @@ import type { AiProposal } from "@/lib/database.types";
 // here so existing imports keep working.
 export {
   readSheetRows,
-  readSheetMatrix,
   readRegisterSheets,
   monthFromHeader,
   normalizeStatus,

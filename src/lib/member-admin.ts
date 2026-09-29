@@ -30,7 +30,7 @@ export interface CreateMemberResult {
  * Phone comparison is on the normalised subscriber digits, so "08031234567"
  * and "+2348031234567" are recognised as the same person.
  */
-export async function findExistingMember(input: {
+async function findExistingMember(input: {
   email?: string;
   phone?: string;
   whatsappNumber?: string;

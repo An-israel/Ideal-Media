@@ -74,6 +74,27 @@ export const MAX_SUBUNITS_PER_MEMBER = 4;
  */
 export const DEFAULT_COUNTRY_CODE = "234";
 
+/**
+ * General training.
+ *
+ * A teaching counts as listened once this fraction of it has actually been
+ * PLAYED (not merely seeked past) — 90% allows for skipping an intro or
+ * trailing silence without letting someone drag the slider to the end.
+ */
+export const TEACHING_COMPLETE_FRACTION = 0.9;
+
+/** How often the player reports progress back to the server, in seconds. */
+export const TEACHING_PROGRESS_INTERVAL_SECONDS = 15;
+
+/** Lifetime of a signed media URL. Long enough for a full teaching. */
+export const TRAINING_SIGNED_URL_SECONDS = 60 * 60 * 4;
+
+/** Upload guardrail for a teaching's audio/video file. */
+export const MAX_TEACHING_UPLOAD_BYTES = 200 * 1024 * 1024;
+
+export const ACCEPTED_TEACHING_AUDIO = [".m4a", ".mp3", ".aac", ".wav", ".ogg"] as const;
+export const ACCEPTED_TEACHING_VIDEO = [".mp4", ".webm", ".mov", ".m4v"] as const;
+
 /** Welfare escalation ceiling (welfare_followups.level is checked 1..3). */
 export const MAX_WELFARE_LEVEL = 3;
 
@@ -95,8 +116,3 @@ export const MEMBER_STATUSES = [
 ] as const;
 export type MemberStatus = (typeof MEMBER_STATUSES)[number];
 
-/** Seed subunits (Section 4). Keep slugs stable; used for routing/lookup. */
-export const SEED_SUBUNITS = {
-  primary: ["Photography", "Projection", "Production", "Social Media", "Utility (Videography & Technical)"],
-  secondary: ["Graphic Design", "Video Editing", "Welfare", "Secretary", "Publication"],
-} as const;

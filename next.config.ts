@@ -32,6 +32,22 @@ const nextConfig: NextConfig = {
   // Don't advertise the framework version.
   poweredByHeader: false,
 
+  experimental: {
+    serverActions: {
+      /**
+       * Server actions default to a 1MB request body, which is smaller than
+       * things this app legitimately posts — an attendance sheet or a photo of
+       * a register is capped at 5MB (MAX_UPLOAD_BYTES), so anything over 1MB
+       * was failing before it reached the handler.
+       *
+       * Training media does NOT come through here: those files can be hundreds
+       * of megabytes, so they upload straight to Supabase Storage from the
+       * browser using a signed upload URL (see prepareTeachingUpload).
+       */
+      bodySizeLimit: "8mb",
+    },
+  },
+
   async headers() {
     return [
       {

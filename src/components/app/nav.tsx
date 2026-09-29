@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   GraduationCap,
+  Headphones,
+  Network,
   Users,
   ClipboardList,
   HeartHandshake,
@@ -23,7 +25,10 @@ interface NavItem {
 
 const ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  // Open to every member: department-wide teaching, and the subunit directory.
+  { href: "/training", label: "General Training", icon: Headphones },
   { href: "/courses", label: "My Courses", icon: GraduationCap },
+  { href: "/subunits", label: "Subunits", icon: Network },
   { href: "/leader", label: "Leader", icon: Users, roles: ["subunit_leader", "super_admin"] },
   { href: "/secretary", label: "Secretary", icon: ClipboardList, roles: ["secretary", "super_admin"] },
   { href: "/welfare", label: "Welfare", icon: HeartHandshake, roles: ["welfare", "super_admin"] },
