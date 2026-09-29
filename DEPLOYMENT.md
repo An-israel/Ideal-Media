@@ -113,6 +113,48 @@ up.
 
 ---
 
+## Part 6 — Make sure changes actually reach the live site
+
+Vercel builds **every** branch you push, but only one of them becomes the live
+site. That branch is the **Production Branch**, and for this project it is
+`main`. Every other branch gets a *Preview* deployment: a private URL that
+nobody but you visits.
+
+This is the single most common reason for "I merged the change but the site
+looks the same". Between August and late September 2026, every deployment
+stopped at Preview because all the work was on `claude/*` branches — the live
+site kept serving the last commit that reached `main`.
+
+**So: work on a branch, then merge it into `main`.** The moment `main` moves,
+Vercel deploys to production on its own — no promoting, no manual redeploy, no
+waiting on a rebuild.
+
+How to check which branch is live:
+
+1. Vercel → your project → **Settings → Git**.
+2. Look at **Production Branch**. Whatever is named there is the live site.
+3. In **Deployments**, each row is tagged *Production* or *Preview*. If the
+   newest rows all say *Preview*, nothing you pushed has gone live.
+
+If you would rather have a different branch be the live one, change
+**Production Branch** in that same settings screen and redeploy once. Only one
+branch can hold that role.
+
+> Don't promote a Preview to Production as your normal routine (Deployments →
+> ⋯ → *Promote to Production*). It rebuilds from scratch, which is slow, and
+> it leaves `main` behind — so the next push to `main` silently reverts the
+> site to older code.
+
+### One environment variable that is easy to miss
+
+`CRON_SECRET` — the daily birthday-reminder route (`/api/cron/birthdays`)
+refuses to run without it, on purpose, so nobody on the internet can trigger
+it. Set it in Vercel → **Settings → Environment Variables** to any long random
+string, then redeploy. Until you do, birthday notifications simply never fire
+and the route answers `503`.
+
+---
+
 ## If something looks wrong
 
 - **The page says "Application error" right after deploy:** an environment
@@ -125,5 +167,8 @@ up.
   limited for testing. For real use, connect your own email provider under
   Supabase → Authentication → Emails (optional; everything else works without
   it).
+- **You pushed/merged a change but the live site is unchanged:** check
+  Vercel → **Settings → Git → Production Branch** (see Part 6). If your commit
+  isn't on that branch, it only ever built a Preview.
 - **Need to change the AI cost/quality:** the model is set in
   `src/lib/constants.ts` (`ATTENDANCE_PARSE_MODEL`).
