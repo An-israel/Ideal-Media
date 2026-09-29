@@ -11,6 +11,7 @@ import {
   ClipboardList,
   HeartHandshake,
   Shield,
+  UserRound,
   type LucideIcon,
 } from "lucide-react";
 import type { Role } from "@/lib/constants";
@@ -33,6 +34,9 @@ const ITEMS: NavItem[] = [
   { href: "/secretary", label: "Secretary", icon: ClipboardList, roles: ["secretary", "super_admin"] },
   { href: "/welfare", label: "Welfare", icon: HeartHandshake, roles: ["welfare", "super_admin"] },
   { href: "/admin", label: "Admin", icon: Shield, roles: ["super_admin"] },
+  // Last, and open to everyone — this is where a leader sets the WhatsApp
+  // number that assignment submissions are routed to.
+  { href: "/profile", label: "My profile", icon: UserRound },
 ];
 
 export function Nav({ roles, onNavigate }: { roles: Role[]; onNavigate?: () => void }) {

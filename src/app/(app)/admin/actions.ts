@@ -5,6 +5,9 @@ import { getSessionRoles } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { syncWelfareForStatus } from "@/app/(app)/secretary/roster/actions";
+import { notifyMany } from "@/lib/notify";
+import { fetchAllRows } from "@/lib/pagination";
+import { normalizePhone } from "@/lib/phone";
 import type { Role, SubunitCategory, MemberStatus } from "@/lib/database.types";
 
 async function requireSuperAdmin() {
@@ -385,4 +388,111 @@ export async function adminSetMemberStatus(userId: string, status: MemberStatus)
   revalidatePath("/admin/members");
   revalidatePath("/secretary/roster");
   revalidatePath("/welfare");
+}
+
+// --------------------------------------------------- Instructor contactability --
+
+export interface MissingWhatsAppRow {
+  instructorId: string;
+  instructorName: string;
+  courseCount: number;
+  publishedCourseCount: number;
+}
+
+/**
+ * Instructors whose courses have no working assignment-submission route,
+ * because their WhatsApp number is missing or unusable.
+ *
+ * Computed here rather than in SQL: a definer function listing everyone with no
+ * contact details was reachable by any signed-in member, since Supabase grants
+ * EXECUTE on public-schema functions to `authenticated` by default. Behind
+ * requireSuperAdmin() this is properly gated, and it reuses the tested
+ * normalizePhone() instead of a second copy of the validity rule in SQL.
+ */
+export async function getInstructorsMissingWhatsApp(): Promise<MissingWhatsAppRow[]> {
+  await requireSuperAdmin();
+  const admin = createAdminClient();
+
+  const courses = await fetchAllRows<{
+    id: string;
+    is_published: boolean;
+    instructor_id: string | null;
+    created_by: string | null;
+  }>((from, to) =>
+    admin
+      .from("courses")
+      .select("id, is_published, instructor_id, created_by")
+      .range(from, to)
+  );
+  if (courses.length === 0) return [];
+
+  const instructorIds = [
+    ...new Set(
+      courses
+        .map((c) => c.instructor_id ?? c.created_by)
+        .filter((id): id is string => !!id)
+    ),
+  ];
+  if (instructorIds.length === 0) return [];
+
+  const { data: profiles } = await admin
+    .from("profiles")
+    .select("id, full_name, whatsapp_number")
+    .in("id", instructorIds);
+
+  const byId = new Map((profiles ?? []).map((p) => [p.id, p]));
+  const tally = new Map<string, MissingWhatsAppRow>();
+
+  for (const course of courses) {
+    const id = course.instructor_id ?? course.created_by;
+    if (!id) continue;
+    const profile = byId.get(id);
+    // Same rule the wa.me link uses, so the list and the link never disagree.
+    if (!profile || normalizePhone(profile.whatsapp_number) !== null) continue;
+
+    const row =
+      tally.get(id) ??
+      ({
+        instructorId: id,
+        instructorName: profile.full_name,
+        courseCount: 0,
+        publishedCourseCount: 0,
+      } satisfies MissingWhatsAppRow);
+    row.courseCount++;
+    if (course.is_published) row.publishedCourseCount++;
+    tally.set(id, row);
+  }
+
+  return [...tally.values()].sort(
+    (a, b) =>
+      b.publishedCourseCount - a.publishedCourseCount ||
+      a.instructorName.localeCompare(b.instructorName)
+  );
+}
+
+/**
+ * Tells every instructor with a missing WhatsApp number to go and add one.
+ *
+ * This is the "tell each of them" step: seeing the list is only useful if you
+ * can act on it from the same screen.
+ */
+export async function remindInstructorsToAddWhatsApp(): Promise<{ notified: number }> {
+  await requireSuperAdmin();
+  const rows = await getInstructorsMissingWhatsApp();
+  if (rows.length === 0) return { notified: 0 };
+
+  await notifyMany(
+    rows.map((r) => ({
+      userId: r.instructorId,
+      type: "whatsapp_number_missing",
+      title: "Add your WhatsApp number",
+      body:
+        `You teach ${r.courseCount} course${r.courseCount === 1 ? "" : "s"}. Members submit ` +
+        `assignments by opening a WhatsApp chat with you, so please add your number under My profile.`,
+      link: "/profile",
+    }))
+  );
+
+  revalidatePath("/admin/members");
+  return { notified: rows.length };
 }

@@ -15,6 +15,7 @@ import {
 import { GraduationCap, Headphones, Network, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getTrainingForMember } from "@/lib/training";
+import { getCourseInstructors } from "@/lib/course-access";
 
 export default async function DashboardPage() {
   const session = await getSessionRoles();
@@ -48,6 +49,8 @@ export default async function DashboardPage() {
       .eq("status", "pending")
       .maybeSingle(),
   ]);
+
+  const instructors = await getCourseInstructors(supabase);
 
   const teachings = trainingSeries.flatMap((s) => s.teachings);
   const teachingsDone = teachings.filter((t) => t.completed).length;
@@ -181,6 +184,11 @@ export default async function DashboardPage() {
               <Card className="h-full transition-colors hover:border-[var(--accent)]">
                 <CardHeader>
                   <CardTitle className="text-base">{c.title}</CardTitle>
+                  {instructors.get(c.id)?.instructorName && (
+                    <p className="text-xs text-[var(--text-muted)]">
+                      Taught by {instructors.get(c.id)!.instructorName}
+                    </p>
+                  )}
                   {c.description && (
                     <CardDescription className="line-clamp-2">{c.description}</CardDescription>
                   )}

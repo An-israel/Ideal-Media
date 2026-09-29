@@ -69,3 +69,43 @@ describe("buildWhatsAppLink", () => {
     expect(buildWhatsAppLink("", "hi")).toBeNull();
   });
 });
+
+describe("WhatsApp reachability (what gates course publishing)", () => {
+  // A course can only be published when its instructor is reachable here, and
+  // the admin "who's missing a number" list uses the same rule. The SQL side
+  // (course_instructors.has_whatsapp) approximates it with ">= 8 digits", so
+  // these cases pin down where the two must agree.
+  const reachable = [
+    "08031234567",
+    "+2348031234567",
+    "234 803 123 4567",
+    "(0803) 123-4567",
+    "002348031234567",
+    "8031234567",
+  ];
+  const unreachable = ["", "   ", "n/a", "none", "123", "0", "-", "07"];
+
+  it.each(reachable)("accepts %s", (input) => {
+    expect(normalizePhone(input)).not.toBeNull();
+  });
+
+  it.each(unreachable)("rejects %j", (input) => {
+    expect(normalizePhone(input)).toBeNull();
+  });
+
+  it("agrees with the SQL >= 8 digit rule on these cases", () => {
+    // The SQL rule: strip non-digits, require at least 8. Any input where the
+    // two disagree is a case where the UI and the publish guard could diverge.
+    const sqlSaysReachable = (v: string) => v.replace(/\D/g, "").length >= 8;
+    for (const input of [...reachable, ...unreachable]) {
+      expect(sqlSaysReachable(input)).toBe(normalizePhone(input) !== null);
+    }
+  });
+
+  it("builds a working wa.me link for every reachable form", () => {
+    for (const input of reachable) {
+      const link = buildWhatsAppLink(input, "hello");
+      expect(link).toMatch(/^https:\/\/wa\.me\/\d{8,}\?text=hello$/);
+    }
+  });
+});

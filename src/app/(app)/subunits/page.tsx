@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionRoles } from "@/lib/auth";
 import { fetchAllRows } from "@/lib/pagination";
+import { getCourseInstructors } from "@/lib/course-access";
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { SubunitsBrowser, type BrowserSubunit } from "./subunits-browser";
@@ -60,6 +61,8 @@ export default async function SubunitsPage() {
       .range(from, to)
   );
 
+  const instructors = await getCourseInstructors(supabase);
+
   const myEnrollments = await fetchAllRows<{ course_id: string; status: string }>((from, to) =>
     supabase.from("enrollments").select("course_id, status").eq("user_id", session.userId).range(from, to)
   );
@@ -78,6 +81,7 @@ export default async function SubunitsPage() {
       .map((c) => ({
         id: c.id,
         title: c.title,
+        instructorName: instructors.get(c.id)?.instructorName ?? null,
         enrollmentStatus: enrollmentByCourse.get(c.id) ?? null,
       })),
   }));

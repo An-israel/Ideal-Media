@@ -1,9 +1,12 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getInstructorsMissingWhatsApp } from "../actions";
 import { MembersClient, type AdminMemberRow } from "./members-client";
+import { MissingWhatsAppPanel } from "./missing-whatsapp";
 import type { MemberStatus } from "@/lib/database.types";
 
 export default async function AdminMembersPage() {
   const admin = createAdminClient();
+  const missingWhatsApp = await getInstructorsMissingWhatsApp();
   const { data } = await admin
     .from("subunit_members")
     .select("user_id, profiles(full_name, email, member_status), subunits(name)")
@@ -25,5 +28,10 @@ export default async function AdminMembersPage() {
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  return <MembersClient rows={rows} />;
+  return (
+    <div>
+      <MissingWhatsAppPanel rows={missingWhatsApp} />
+      <MembersClient rows={rows} />
+    </div>
+  );
 }

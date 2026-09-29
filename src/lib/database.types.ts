@@ -89,6 +89,11 @@ export type Course = {
   description: string | null;
   /** Null once the author's account is deleted (ON DELETE SET NULL). */
   created_by: string | null;
+  /**
+   * Who teaches this course and receives assignment submissions over WhatsApp.
+   * Defaults to created_by; editable by a leader of the course's subunit.
+   */
+  instructor_id: string | null;
   is_published: boolean;
   created_at: string;
   updated_at: string | null;
@@ -396,6 +401,15 @@ export type Database = {
       subunit_member_counts: {
         Args: Record<string, never>;
         Returns: { subunit_id: string; member_count: number }[];
+      };
+      course_instructors: {
+        Args: Record<string, never>;
+        Returns: {
+          course_id: string;
+          instructor_id: string | null;
+          instructor_name: string | null;
+          has_whatsapp: boolean | null;
+        }[];
       };
     };
     Enums: { [_ in never]: never };

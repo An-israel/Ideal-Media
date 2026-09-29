@@ -61,8 +61,11 @@ same thing plus a build.
    - `0012_training_and_subunit_requests.sql` — **required.** General Training
      (series, teachings, per-member listen progress, the private `training`
      storage bucket) and subunit change requests.
+   - `0013_course_instructor.sql` — **required.** `courses.instructor_id` plus
+     the `course_instructors()` lookup, so every course names who teaches it
+     and where assignment submissions go.
 
-   Both 0011 and 0012 are idempotent — re-running them is safe.
+   0011, 0012 and 0013 are all idempotent — re-running them is safe.
 
 3. **Raise the Storage upload limit** if you will host long teachings.
    Migration 0012 sets the `training` bucket's own limit to 200MB, but the
@@ -100,6 +103,37 @@ URL, because a server action caps its request body at 1MB and buffering a
 200MB file in the Next process would be pointless. The server authorises the
 upload and records the row; the bucket stays private and playback uses
 short-lived signed URLs.
+
+## Course instructors and WhatsApp submissions
+
+Every course names an **instructor** (`courses.instructor_id`, defaulting to
+whoever created it). Two things follow from that:
+
+- **Their name shows on the course** — on the member's course list, the
+  dashboard, the subunit directory and the course itself ("Taught by Ada
+  Okeke"). Previously nothing said who a course belonged to.
+- **Assignment submissions open a WhatsApp chat with them.** The member taps
+  *Submit to leader on WhatsApp* and it goes to that person, addressed to them
+  by name, with the course and module filled in.
+
+Because the whole submission route depends on one phone number:
+
+- **`/profile`** is where anyone sets their own WhatsApp number. This page did
+  not exist before — `whatsapp_number` was only ever written at signup, so a
+  leader who skipped or mistyped it had no way to fix it and their courses
+  silently had nowhere to submit to. The page previews the number in the form
+  it will actually be dialled (`08031234567` → `+2348031234567`), since that is
+  the part people get wrong.
+- **A course cannot be published** while its instructor has no valid number —
+  it would have no working submission route at all. The error names who needs
+  to act, and notifies them.
+- **Leaders are nudged** on their own courses page, and **super admins** get a
+  list of every instructor missing a number on `/admin/members`, with a
+  one-click *Remind them all*.
+- **Reassigning is a field, not a guess.** The old code inferred the contact
+  (course author *if* they happened to lead the subunit, otherwise the
+  subunit's longest-standing leader), which nobody could see or change. Now a
+  leader picks the instructor from a dropdown, so a course can be handed over.
 
 ## Subunits: joining and moving
 
@@ -157,6 +191,8 @@ src/
   app/
     (app)/training/ General Training: library, player, manage + listen report
     (app)/subunits/ subunit directory, join/leave, primary-change requests
+    (app)/profile/  edit your own details — including the WhatsApp number
+                    that course submissions are routed to
     auth/callback/  exchanges Supabase email links for a session (password reset)
     api/cron/       Vercel Cron routes (excluded from the proxy; self-authenticating)
   lib/

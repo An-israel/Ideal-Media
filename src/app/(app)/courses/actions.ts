@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { resolveCourseLeader } from "@/lib/course-access";
+import { resolveCourseInstructor } from "@/lib/course-access";
 import { notify } from "@/lib/notify";
 import { buildWhatsAppLink } from "@/lib/phone";
 
@@ -91,14 +91,14 @@ export async function applyForCourse(courseId: string, reason: string): Promise<
   });
   if (error) return { ok: false, error: error.message };
 
-  const [{ data: profile }, leader] = await Promise.all([
+  const [{ data: profile }, instructor] = await Promise.all([
     supabase.from("profiles").select("full_name").eq("id", user.id).single(),
-    resolveCourseLeader(courseId),
+    resolveCourseInstructor(courseId),
   ]);
 
-  if (leader) {
+  if (instructor) {
     await notify({
-      userId: leader.id,
+      userId: instructor.id,
       type: "course_application",
       title: "New course application",
       body: `${profile?.full_name ?? "A member"} applied for "${course.title}".`,
@@ -113,8 +113,10 @@ export async function applyForCourse(courseId: string, reason: string): Promise<
 
 export interface SubmitResult {
   waLink: string | null;
-  /** Set when the leader has no usable WhatsApp number on file. */
+  /** Set when the instructor has no usable WhatsApp number on file. */
   warning?: string;
+  /** Who the submission is going to, for the confirmation message. */
+  instructorName?: string;
 }
 
 /**
@@ -205,10 +207,10 @@ export async function submitModule(moduleId: string): Promise<SubmitResult> {
   const courseTitle = courses?.title ?? "course";
   const subunitName = courses?.subunits?.name ?? "";
 
-  const leader = await resolveCourseLeader(mod.course_id);
-  if (leader) {
+  const instructor = await resolveCourseInstructor(mod.course_id);
+  if (instructor) {
     await notify({
-      userId: leader.id,
+      userId: instructor.id,
       type: "assignment_submission",
       title: "New assignment submission",
       body: `${profile?.full_name ?? "A member"} submitted "${mod.title}" in ${courseTitle}.`,
@@ -218,23 +220,38 @@ export async function submitModule(moduleId: string): Promise<SubmitResult> {
 
   let waLink: string | null = null;
   let warning: string | undefined;
-  if (leader?.whatsapp_number) {
+  let instructorName: string | undefined;
+
+  if (instructor) {
+    instructorName = instructor.full_name;
     const message =
-      `Hello, this is ${profile?.full_name ?? "a member"} (${subunitName}). ` +
+      `Hello ${instructor.full_name}, this is ${profile?.full_name ?? "a member"} (${subunitName}). ` +
       `Submitting my assignment for review.\n` +
       `Course: ${courseTitle}\nModule ${mod.position}: ${mod.title}`;
-    // Returns null when the stored number can't be made international — say so
-    // instead of handing back a dead wa.me link (AUDIT CRS-3).
-    waLink = buildWhatsAppLink(leader.whatsapp_number, message);
+    // Null when the stored number can't be made international — say so instead
+    // of handing back a dead wa.me link (AUDIT CRS-3).
+    waLink = instructor.whatsapp_number
+      ? buildWhatsAppLink(instructor.whatsapp_number, message)
+      : null;
     if (!waLink) {
-      warning = `Your leader's WhatsApp number (${leader.whatsapp_number}) isn't a valid number, so we couldn't open a chat. Your submission was recorded — please message them directly.`;
+      warning =
+        `${instructor.full_name} hasn't added a usable WhatsApp number yet, so we couldn't open a chat. ` +
+        `Your submission was recorded and they've been notified in the app — please reach them directly.`;
+      // Tell the instructor, since the member can't fix this themselves.
+      await notify({
+        userId: instructor.id,
+        type: "whatsapp_number_missing",
+        title: "Add your WhatsApp number",
+        body: `${profile?.full_name ?? "A member"} tried to submit an assignment for "${courseTitle}" but couldn't reach you — your WhatsApp number is missing or invalid.`,
+        link: "/profile",
+      });
     }
   } else {
     warning =
-      "Your leader hasn't added a WhatsApp number yet, so we couldn't open a chat. Your submission was recorded — please message them directly.";
+      "This course has no instructor attached, so we couldn't open a chat. Your submission was recorded — please tell an admin.";
   }
 
   revalidatePath(`/courses/${mod.course_id}`);
   revalidatePath("/dashboard");
-  return { waLink, warning };
+  return { waLink, warning, instructorName };
 }

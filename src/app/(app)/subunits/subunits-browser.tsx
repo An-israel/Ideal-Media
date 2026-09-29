@@ -26,7 +26,12 @@ export interface BrowserSubunit {
   description: string | null;
   memberCount: number;
   membership: "primary" | "secondary" | null;
-  courses: { id: string; title: string; enrollmentStatus: string | null }[];
+  courses: {
+    id: string;
+    title: string;
+    instructorName: string | null;
+    enrollmentStatus: string | null;
+  }[];
 }
 
 export interface PendingRequest {
@@ -145,7 +150,14 @@ export function SubunitsBrowser({
                     </p>
                     {s.courses.map((c) => (
                       <div key={c.id} className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-sm">{c.title}</span>
+                        <span className="text-sm">
+                          {c.title}
+                          {c.instructorName && (
+                            <span className="block text-xs text-[var(--text-muted)]">
+                              Taught by {c.instructorName}
+                            </span>
+                          )}
+                        </span>
                         {c.enrollmentStatus === "enrolled" ? (
                           <Badge variant="success">Enrolled</Badge>
                         ) : c.enrollmentStatus === "pending_application" ? (

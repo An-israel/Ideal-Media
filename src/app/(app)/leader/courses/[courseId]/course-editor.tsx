@@ -27,6 +27,7 @@ import {
   deleteModule,
   moveModule,
   setPublished,
+  setCourseInstructor,
   updateCourse,
   updateModule,
 } from "../actions";
@@ -52,24 +53,40 @@ const emptyDraft: ModuleDraft = {
   instructions: "",
 };
 
+export interface InstructorOption {
+  id: string;
+  name: string;
+  hasWhatsApp: boolean;
+}
+
 export function CourseEditor({
   courseId,
   initialTitle,
   initialDescription,
   isPublished,
   modules,
+  instructorId,
+  instructorName,
+  instructorReachable,
+  instructorOptions,
 }: {
   courseId: string;
   initialTitle: string;
   initialDescription: string;
   isPublished: boolean;
   modules: EditorModule[];
+  instructorId: string | null;
+  instructorName: string | null;
+  /** Whether their stored WhatsApp number can actually be dialled. */
+  instructorReachable: boolean;
+  instructorOptions: InstructorOption[];
 }) {
   const router = useRouter();
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(initialDescription);
   const [savingDetails, setSavingDetails] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [instructor, setInstructor] = useState(instructorId ?? "");
 
   const [editing, setEditing] = useState<EditorModule | null>(null);
   const [adding, setAdding] = useState(false);
@@ -93,7 +110,34 @@ export function CourseEditor({
       await setPublished(courseId, !isPublished);
       router.refresh();
     } catch (e) {
-      toast({ title: "Could not update", description: String(e), variant: "error" });
+      // Publishing is refused when the instructor has no usable WhatsApp
+      // number, and the message names who needs to add one — so show it in full
+      // rather than truncating it.
+      toast({
+        title: "Could not publish",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "error",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveInstructor(next: string) {
+    setInstructor(next);
+    if (!next || next === instructorId) return;
+    setBusy(true);
+    try {
+      await setCourseInstructor(courseId, next);
+      toast({ title: "Instructor updated", variant: "success" });
+      router.refresh();
+    } catch (e) {
+      setInstructor(instructorId ?? "");
+      toast({
+        title: "Could not change the instructor",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "error",
+      });
     } finally {
       setBusy(false);
     }
@@ -196,6 +240,44 @@ export function CourseEditor({
           <Button onClick={saveDetails} disabled={savingDetails} variant="secondary">
             {savingDetails ? "Saving…" : "Save details"}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Who teaches it — shown on the course, and where submissions go. */}
+      <Card>
+        <CardContent className="space-y-3 pt-6">
+          <div className="space-y-2">
+            <Label htmlFor="instructor">Instructor</Label>
+            <Select
+              id="instructor"
+              value={instructor}
+              onChange={(e) => saveInstructor(e.target.value)}
+              disabled={busy}
+            >
+              <option value="">Choose an instructor…</option>
+              {instructorOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                  {!o.hasWhatsApp ? " — no WhatsApp number" : ""}
+                </option>
+              ))}
+            </Select>
+            <p className="text-xs text-[var(--text-muted)]">
+              Their name shows on this course, and members&apos; assignment submissions open a
+              WhatsApp chat straight to them.
+            </p>
+          </div>
+
+          {instructorName && !instructorReachable && (
+            <div className="flex items-start gap-2 rounded-xl border border-[var(--danger)]/30 bg-[var(--danger)]/10 px-4 py-3 text-sm">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--danger)]" />
+              <span>
+                <b>{instructorName}</b> has no valid WhatsApp number on their profile, so members
+                can&apos;t submit assignments and this course can&apos;t be published. They need
+                to add one under <b>My profile</b>.
+              </span>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -66,9 +66,14 @@ export function CoursePlayer({ modules }: { modules: PlayerModule[] }) {
     if (!active) return;
     setSubmitting(true);
     try {
-      const { waLink, warning } = await submitModule(active.id);
+      const { waLink, warning, instructorName } = await submitModule(active.id);
       if (waLink) {
         window.open(waLink, "_blank", "noopener");
+        toast({
+          title: instructorName ? `Opening WhatsApp to ${instructorName}` : "Opening WhatsApp",
+          description: "Send your work in the chat that just opened.",
+          variant: "success",
+        });
       } else {
         // `warning` explains exactly why no chat opened (no number on file, or
         // a number that isn't valid internationally).

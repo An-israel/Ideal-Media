@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { UserRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionRoles } from "@/lib/auth";
+import { getCourseInstructors } from "@/lib/course-access";
 import { PageHeader } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -10,6 +12,10 @@ export default async function CoursesPage() {
   const session = await getSessionRoles();
   if (!session) return null;
   const supabase = await createClient();
+
+  // Instructor names for every course, in one call. Members can't read a
+  // leader's profile row, so this comes from a definer function.
+  const instructors = await getCourseInstructors(supabase);
 
   // Member's enrollments (any status).
   const { data: enrollments } = await supabase
@@ -68,6 +74,7 @@ export default async function CoursesPage() {
                         {r.status === "rejected" && <Badge variant="danger">Rejected</Badge>}
                       </div>
                       <CardTitle className="text-base">{r.courses!.title}</CardTitle>
+                      <InstructorLine name={instructors.get(r.courses!.id)?.instructorName} />
                       {r.courses!.description && (
                         <CardDescription className="line-clamp-2">{r.courses!.description}</CardDescription>
                       )}
@@ -94,6 +101,7 @@ export default async function CoursesPage() {
                         <Badge variant="neutral">Locked</Badge>
                       </div>
                       <CardTitle className="text-base">{c.title}</CardTitle>
+                      <InstructorLine name={instructors.get(c.id)?.instructorName} />
                       {c.description && (
                         <CardDescription className="line-clamp-2">{c.description}</CardDescription>
                       )}
@@ -109,5 +117,16 @@ export default async function CoursesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+/** "Taught by Ada Okeke" under a course title. */
+function InstructorLine({ name }: { name?: string | null }) {
+  if (!name) return null;
+  return (
+    <p className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+      <UserRound className="h-3 w-3" />
+      Taught by {name}
+    </p>
   );
 }
