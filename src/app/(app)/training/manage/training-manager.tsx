@@ -91,6 +91,11 @@ export function TrainingManager({ series }: { series: ManagerSeries[] }) {
             <CardTitle className="text-base">New series</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            <p className="text-sm text-[var(--text-muted)]">
+              A series holds the parts of a teaching (Part 1, Part 2…). Create it first —
+              then each series gets an <strong>Add a teaching</strong> button where you
+              upload the MP3 or MP4.
+            </p>
             <div className="space-y-2">
               <Label htmlFor="series-title">Title</Label>
               <Input
