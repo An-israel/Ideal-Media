@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/pagination";
 import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RosterTable, type RosterRow } from "./roster-table";
@@ -7,11 +8,15 @@ import type { MemberStatus } from "@/lib/database.types";
 export default async function RosterPage() {
   const supabase = await createClient();
 
-  const { data: members } = await supabase
-    .from("subunit_members")
-    .select("user_id, profiles(full_name, member_status, location, member_origin, claimed), subunits(name)")
-    .eq("membership_type", "primary")
-    .order("user_id");
+  // Paged past the 1000-row cap so the roster never truncates.
+  const members = await fetchAllRows((from, to) =>
+    supabase
+      .from("subunit_members")
+      .select("user_id, profiles(full_name, member_status, location, member_origin, claimed), subunits(name)")
+      .eq("membership_type", "primary")
+      .order("user_id")
+      .range(from, to)
+  );
 
   const { data: subunits } = await supabase
     .from("subunits")

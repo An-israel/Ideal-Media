@@ -32,7 +32,12 @@ export async function setMemberStatus(userIds: string[], status: MemberStatus) {
 
   // Marking someone traveled/inactive opens a welfare follow-up and notifies
   // the welfare team so they know to check in. Returning to active resolves it.
-  await syncWelfareForStatus(userIds, status);
+  // Best-effort: the status change itself must never fail because of this.
+  try {
+    await syncWelfareForStatus(userIds, status);
+  } catch {
+    /* noop */
+  }
 
   revalidatePath("/secretary/roster");
   revalidatePath("/secretary");
@@ -51,25 +56,31 @@ export async function syncWelfareForStatus(userIds: string[], status: MemberStat
   const admin = createAdminClient();
 
   if (status === "traveled" || status === "inactive") {
-    const reason = status; // both are valid welfare_reason values
-    // Skip anyone who already has an open follow-up for this reason.
-    const { data: existing } = await admin
-      .from("welfare_followups")
-      .select("user_id")
-      .eq("reason", reason)
-      .neq("status", "resolved")
-      .in("user_id", userIds);
-    const alreadyOpen = new Set((existing ?? []).map((r) => r.user_id));
-    const toFlag = userIds.filter((id) => !alreadyOpen.has(id));
-    if (toFlag.length === 0) return;
-
-    const { error } = await admin
-      .from("welfare_followups")
-      .insert(toFlag.map((user_id) => ({ user_id, reason, auto_flagged: true })));
-    if (error) {
-      console.error(`[roster] could not open ${reason} followups:`, error.message);
-      return;
+    const reason = status;
+    // Try to open follow-ups on the welfare board. If the database doesn't
+    // know this reason yet (setup SQL not run), fall back to notifying about
+    // everyone — welfare must still hear about it either way.
+    let toFlag = userIds;
+    try {
+      const { data: existing, error: exErr } = await admin
+        .from("welfare_followups")
+        .select("user_id")
+        .eq("reason", reason)
+        .neq("status", "resolved")
+        .in("user_id", userIds);
+      if (exErr) throw new Error(exErr.message);
+      const alreadyOpen = new Set((existing ?? []).map((r) => r.user_id));
+      toFlag = userIds.filter((id) => !alreadyOpen.has(id));
+      if (toFlag.length > 0) {
+        const { error: insErr } = await admin
+          .from("welfare_followups")
+          .insert(toFlag.map((user_id) => ({ user_id, reason, auto_flagged: true })));
+        if (insErr) throw new Error(insErr.message);
+      }
+    } catch {
+      toFlag = userIds; // board entry failed — still notify the team
     }
+    if (toFlag.length === 0) return;
 
     // Notify the welfare team, naming who needs a follow-up.
     const { data: profs } = await admin
@@ -113,20 +124,27 @@ export async function addMemberToRoster(input: {
   phone: string;
   email: string;
   primarySubunitId: string;
-}) {
-  await requireSecretary();
+}): Promise<{ ok: boolean; error?: string }> {
+  // Never throws: a thrown server-action error reaches the browser as Vercel's
+  // generic "An error occurred…", which hid the real reason from secretaries.
+  try {
+    await requireSecretary();
 
-  await createUnclaimedMember({
-    fullName: input.fullName,
-    email: input.email,
-    phone: input.phone,
-    whatsappNumber: input.whatsappNumber,
-    primarySubunitId: input.primarySubunitId,
-    origin: "secretary",
-  });
+    await createUnclaimedMember({
+      fullName: input.fullName,
+      email: input.email,
+      phone: input.phone,
+      whatsappNumber: input.whatsappNumber,
+      primarySubunitId: input.primarySubunitId,
+      origin: "secretary",
+    });
 
-  revalidatePath("/secretary/roster");
-  revalidatePath("/secretary");
+    revalidatePath("/secretary/roster");
+    revalidatePath("/secretary");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not add member." };
+  }
 }
 
 export interface RemoveMembersResult {
@@ -272,4 +290,65 @@ export async function assignSubunit(userIds: string[], subunitId: string) {
   revalidatePath("/secretary");
   revalidatePath("/leader/members");
   return { added: toInsert.length, skipped };
+}
+
+/**
+ * Moves selected members to a different PRIMARY subunit (the one shown on the
+ * roster). If they already belong to the target subunit it's promoted to
+ * primary; their old primary becomes a secondary membership.
+ */
+export async function moveToSubunit(userIds: string[], subunitId: string) {
+  await requireSecretary();
+  if (userIds.length === 0 || !subunitId) return { moved: 0, skipped: 0 };
+
+  const admin = createAdminClient();
+  const { data: existing } = await admin
+    .from("subunit_members")
+    .select("id, user_id, subunit_id, membership_type")
+    .in("user_id", userIds);
+
+  const byUser = new Map<
+    string,
+    { id: string; subunit_id: string; membership_type: string }[]
+  >();
+  for (const m of existing ?? []) {
+    const list = byUser.get(m.user_id) ?? [];
+    list.push({ id: m.id, subunit_id: m.subunit_id, membership_type: m.membership_type });
+    byUser.set(m.user_id, list);
+  }
+
+  let moved = 0;
+  let skipped = 0;
+  for (const userId of userIds) {
+    const memberships = byUser.get(userId) ?? [];
+    const target = memberships.find((m) => m.subunit_id === subunitId);
+    const primary = memberships.find((m) => m.membership_type === "primary");
+
+    if (target) {
+      if (target.membership_type === "primary") {
+        skipped++; // already their primary subunit
+        continue;
+      }
+      // Promote the target to primary, demote the old primary to secondary.
+      await admin.from("subunit_members").update({ membership_type: "primary" }).eq("id", target.id);
+      if (primary) {
+        await admin.from("subunit_members").update({ membership_type: "secondary" }).eq("id", primary.id);
+      }
+      moved++;
+    } else if (primary) {
+      // Repoint their primary membership to the new subunit.
+      await admin.from("subunit_members").update({ subunit_id: subunitId }).eq("id", primary.id);
+      moved++;
+    } else {
+      // No memberships yet — create a primary one.
+      await admin
+        .from("subunit_members")
+        .insert({ user_id: userId, subunit_id: subunitId, membership_type: "primary" });
+      moved++;
+    }
+  }
+
+  revalidatePath("/secretary/roster");
+  revalidatePath("/secretary");
+  return { moved, skipped };
 }

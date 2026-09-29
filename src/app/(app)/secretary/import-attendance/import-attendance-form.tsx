@@ -165,6 +165,11 @@ export function ImportAttendanceForm({ activities }: { activities: { id: string;
               Imported {result.imported} record{result.imported === 1 ? "" : "s"}
               {result.summaries ? ` and ${result.summaries} monthly tall${result.summaries === 1 ? "y" : "ies"}` : ""}.
             </p>
+            {result.warning && (
+              <p className="rounded-lg border border-[var(--warning)]/30 bg-[var(--warning)]/10 px-3 py-2 text-sm text-[var(--warning)]">
+                {result.warning}
+              </p>
+            )}
             {result.sheets && result.sheets.length > 0 && (
               <p className="text-xs text-[var(--text-muted)]">
                 Read {result.sheets.length} sheet{result.sheets.length === 1 ? "" : "s"}:{" "}

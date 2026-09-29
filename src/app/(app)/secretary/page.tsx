@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/pagination";
 import { SecretaryWorkspace, type GridMember, type MonthGroup } from "./secretary-workspace";
 
 function monthLabel(period: string) {
@@ -27,18 +28,29 @@ export default async function SecretaryPage({
   const gridMembers: GridMember[] = [];
 
   if (activityId) {
-    const [{ data: members }, { data: records }, { data: summaryRows }] = await Promise.all([
-      supabase
-        .from("subunit_members")
-        .select("user_id, profiles(full_name), subunits(name)")
-        .eq("membership_type", "primary"),
-      supabase
-        .from("attendance_records")
-        .select("user_id, service_date, status")
-        .eq("activity_id", activityId)
-        .order("service_date", { ascending: false })
-        .limit(4000),
-      supabase.from("monthly_attendance_summary").select("user_id, period, count"),
+    // All queries paged past the 1000-row cap so nothing truncates as the
+    // team and history grow. Summaries are optional (table may not exist yet).
+    const [members, records, summaryRows] = await Promise.all([
+      fetchAllRows((from, to) =>
+        supabase
+          .from("subunit_members")
+          .select("user_id, profiles(full_name), subunits(name)")
+          .eq("membership_type", "primary")
+          .range(from, to)
+      ),
+      fetchAllRows(
+        (from, to) =>
+          supabase
+            .from("attendance_records")
+            .select("user_id, service_date, status")
+            .eq("activity_id", activityId)
+            .order("service_date", { ascending: false })
+            .range(from, to),
+        { maxPages: 30 }
+      ),
+      fetchAllRows((from, to) =>
+        supabase.from("monthly_attendance_summary").select("user_id, period, count").range(from, to)
+      ).catch(() => [] as { user_id: string; period: string; count: number }[]),
     ]);
 
     // Most recent 14 service dates, oldest-first for display.

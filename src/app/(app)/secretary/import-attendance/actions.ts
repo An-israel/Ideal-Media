@@ -101,6 +101,8 @@ export interface AttendanceImportResult {
   summaries?: number;
   /** Workbook tabs that were read. */
   sheets?: string[];
+  /** Partial-success note (e.g. tallies skipped) — import still worked. */
+  warning?: string;
   /** Set when the whole import failed — friendly message. */
   error?: string;
 }
@@ -198,6 +200,22 @@ export async function importPastAttendance(formData: FormData): Promise<Attendan
         status,
         source: "manual",
       });
+    }
+
+    // Nothing usable + mostly unreadable dates → almost certainly a register
+    // layout (dates across the top), not one-row-per-record. Say so instead of
+    // reporting a successful import of zero records.
+    if (records.length === 0 && result.skipped.length > 0) {
+      const dateFails = result.skipped.filter((s) => s.reason.endsWith("unreadable date")).length;
+      if (dateFails >= result.skipped.length / 2) {
+        return {
+          ...result,
+          error:
+            "This file doesn't look like one-row-per-record — most rows had no readable date. " +
+            "If names run down the side with dates across the top (like the media list), switch the " +
+            "Sheet layout above to \u201cRegister (dates across the top)\u201d and import again.",
+        };
+      }
     }
 
     const deduped = dedupeAttendanceRows(records);
@@ -396,13 +414,25 @@ export async function importWideAttendance(formData: FormData): Promise<Attendan
     }
 
     if (summaries.size) {
+      let summaryErr: string | null = null;
       for (const batch of chunk([...summaries.values()], PAGE_SIZE)) {
         const { error } = await admin
           .from("monthly_attendance_summary")
           .upsert(batch, { onConflict: "user_id,period" });
-        if (error) return { ...result, error: error.message };
+        if (error) {
+          summaryErr = error.message;
+          break;
+        }
       }
-      result.summaries = summaries.size;
+      if (summaryErr) {
+        // The dated records are already in. Don't throw that away because the
+        // tally table is missing (setup SQL not run yet) — warn instead.
+        result.warning =
+          `Attendance records imported, but the monthly tallies (FEB/MARCH/\u2026) could not be saved: ` +
+          `${summaryErr}. Run the latest migrations in Supabase, then re-import \u2014 it's safe to repeat.`;
+      } else {
+        result.summaries = summaries.size;
+      }
     }
 
     // Recompute welfare flags for every signal activity actually touched — not

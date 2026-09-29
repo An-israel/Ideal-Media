@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionRoles, type SessionRoles } from "@/lib/auth";
 import { notify } from "@/lib/notify";
+import { MAX_SUBUNITS_PER_MEMBER } from "@/lib/constants";
 
 /**
  * Authorises the caller as a leader of the subunit that owns `courseId`.
@@ -137,7 +138,7 @@ export async function decideApplication(enrollmentId: string, approve: boolean) 
   const admin = createAdminClient();
   const { data: enrollment } = await admin
     .from("enrollments")
-    .select("user_id, course_id, status, courses(title)")
+    .select("user_id, course_id, status, courses(title, subunit_id)")
     .eq("id", enrollmentId)
     .maybeSingle();
   if (!enrollment) throw new Error("Application not found.");
@@ -159,9 +160,33 @@ export async function decideApplication(enrollmentId: string, approve: boolean) 
     .eq("id", enrollmentId);
   if (error) throw new Error(error.message);
 
-  const courseTitle =
-    (enrollment as unknown as { courses: { title: string } | null }).courses?.title ??
-    "the course";
+  const course = (enrollment as unknown as {
+    courses: { title: string; subunit_id: string } | null;
+  }).courses;
+  const courseTitle = course?.title ?? "the course";
+
+  // Approving a cross-subunit application means joining that unit, so give the
+  // member a secondary membership — otherwise they lose course access the
+  // moment `course_visible` is evaluated on membership rather than enrolment.
+  // Best-effort: already a member, or at the subunit cap, is not a failure.
+  if (approve && course?.subunit_id) {
+    const { data: memberships } = await admin
+      .from("subunit_members")
+      .select("subunit_id")
+      .eq("user_id", enrollment.user_id);
+    const rows = memberships ?? [];
+    const already = rows.some((m) => m.subunit_id === course.subunit_id);
+    if (!already && rows.length < MAX_SUBUNITS_PER_MEMBER) {
+      const { error: joinErr } = await admin.from("subunit_members").insert({
+        user_id: enrollment.user_id,
+        subunit_id: course.subunit_id,
+        membership_type: "secondary",
+      });
+      if (joinErr) {
+        console.error("[leader] approved application but could not add membership:", joinErr.message);
+      }
+    }
+  }
 
   await notify({
     userId: enrollment.user_id,

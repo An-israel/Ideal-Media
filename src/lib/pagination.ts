@@ -1,6 +1,17 @@
 import "server-only";
 import { PAGE_SIZE } from "@/lib/constants";
 
+export interface FetchAllOptions {
+  /** Rows per request. PostgREST's own ceiling is 1000. */
+  pageSize?: number;
+  /**
+   * Hard stop, so a query that keeps returning full pages can never loop
+   * forever. Also used deliberately to bound a read that only needs recent
+   * history (e.g. the secretary grid's last few hundred service records).
+   */
+  maxPages?: number;
+}
+
 /**
  * Reads every row of a query by paging through it (AUDIT PERF-2).
  *
@@ -21,10 +32,13 @@ import { PAGE_SIZE } from "@/lib/constants";
  */
 export async function fetchAllRows<T>(
   page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
-  pageSize: number = PAGE_SIZE
+  opts: FetchAllOptions = {}
 ): Promise<T[]> {
+  const pageSize = opts.pageSize ?? PAGE_SIZE;
+  const maxPages = opts.maxPages ?? 50;
   const all: T[] = [];
-  for (let from = 0; ; from += pageSize) {
+  for (let i = 0; i < maxPages; i++) {
+    const from = i * pageSize;
     const { data, error } = await page(from, from + pageSize - 1);
     if (error) throw new Error(error.message);
     const rows = data ?? [];

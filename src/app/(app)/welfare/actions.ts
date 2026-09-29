@@ -89,48 +89,66 @@ export interface NewMemberInput {
   notes: string;
 }
 
+export interface AddMemberResult {
+  ok: boolean;
+  error?: string;
+}
+
 /**
  * Welfare adds a new member they met (e.g. a Sunday visitor). Creates an
  * unclaimed member record so it shows on the secretary's roster, opens a
  * new-member follow-up on the welfare board, and notifies the secretaries.
  * The person claims the record later by signing up with a matching phone.
+ *
+ * Returns a result object (never throws) — a thrown error in a server action
+ * is masked by Vercel in production ("An error occurred in the Server
+ * Components render…"), which hid the real reason (usually "already exists").
  */
-export async function addNewMember(input: NewMemberInput) {
-  await requireWelfare();
+export async function addNewMember(input: NewMemberInput): Promise<AddMemberResult> {
+  // Never throws: a thrown error in a server action is masked by Vercel in
+  // production, which is what hid the real reason from welfare for weeks.
+  try {
+    await requireWelfare();
 
-  // Creation is transactional-ish: the auth user is rolled back if any later
-  // step fails, so a failure can't leave an orphaned login (AUDIT ROS-2).
-  const { userId } = await createUnclaimedMember({
-    fullName: input.fullName,
-    email: input.email,
-    phone: input.phone,
-    whatsappNumber: input.whatsappNumber,
-    primarySubunitId: input.primarySubunitId,
-    origin: "welfare",
-  });
+    // Creation is transactional-ish: the auth user is rolled back if any later
+    // step fails, so a failure can't leave an orphaned login (AUDIT ROS-2).
+    // It also runs the duplicate check on normalised phone digits, so
+    // "08031234567" and "+2348031234567" are recognised as the same person.
+    const { userId } = await createUnclaimedMember({
+      fullName: input.fullName,
+      email: input.email,
+      phone: input.phone,
+      whatsappNumber: input.whatsappNumber,
+      primarySubunitId: input.primarySubunitId,
+      origin: "welfare",
+    });
 
-  const admin = createAdminClient();
-  const { error: followupErr } = await admin.from("welfare_followups").insert({
-    user_id: userId,
-    reason: "new_member",
-    auto_flagged: false,
-    notes: input.notes || null,
-  });
-  if (followupErr) {
-    // The member exists and is on the roster; only the board entry failed.
-    console.error("[welfare] could not open new-member followup:", followupErr.message);
+    const admin = createAdminClient();
+    const { error: followupErr } = await admin.from("welfare_followups").insert({
+      user_id: userId,
+      reason: "new_member",
+      auto_flagged: false,
+      notes: input.notes || null,
+    });
+    if (followupErr) {
+      // The member exists and is on the roster; only the board entry failed.
+      console.error("[welfare] could not open new-member followup:", followupErr.message);
+    }
+
+    // Notify the secretaries — the new member now shows on their roster. One
+    // batched insert rather than a client and a round trip per recipient.
+    await notifyRole("secretary", {
+      type: "new_member_added",
+      title: "New member added",
+      body: `${input.fullName.trim()} was added by welfare and is now on the roster.`,
+      link: "/secretary/roster",
+    });
+
+    revalidatePath("/welfare");
+    revalidatePath("/secretary/roster");
+    revalidatePath("/secretary");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not add member." };
   }
-
-  // Notify the secretaries — the new member now shows on their roster. One
-  // batched insert rather than a client and a round trip per recipient.
-  await notifyRole("secretary", {
-    type: "new_member_added",
-    title: "New member added",
-    body: `${input.fullName.trim()} was added by welfare and is now on the roster.`,
-    link: "/secretary/roster",
-  });
-
-  revalidatePath("/welfare");
-  revalidatePath("/secretary/roster");
-  revalidatePath("/secretary");
 }

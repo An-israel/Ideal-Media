@@ -35,7 +35,11 @@ export function AddNewMemberButton({ subunits }: { subunits: { id: string; name:
     }
     setLoading(true);
     try {
-      await addNewMember(form);
+      const res = await addNewMember(form);
+      if (!res.ok) {
+        toast({ title: "Could not add member", description: res.error, variant: "error" });
+        return;
+      }
       toast({ title: "New member added", description: "They're on the roster and the welfare board.", variant: "success" });
       setOpen(false);
       setForm({ fullName: "", whatsappNumber: "", phone: "", email: "", primarySubunitId: subunits[0]?.id ?? "", notes: "" });

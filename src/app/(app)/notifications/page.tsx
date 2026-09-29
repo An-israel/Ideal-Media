@@ -1,7 +1,8 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent } from "@/components/ui/card";
-import { Bell } from "lucide-react";
+import { Bell, ChevronRight } from "lucide-react";
 import { MarkRead } from "./mark-read";
 
 export default async function NotificationsPage() {
@@ -28,8 +29,8 @@ export default async function NotificationsPage() {
         </Card>
       ) : (
         <div className="space-y-2">
-          {rows.map((n) => (
-            <Card key={n.id}>
+          {rows.map((n) => {
+            const inner = (
               <CardContent className="flex items-start gap-3 p-4">
                 <span
                   className={
@@ -37,13 +38,23 @@ export default async function NotificationsPage() {
                     (n.is_read ? "bg-[var(--border)]" : "bg-[var(--accent)]")
                   }
                 />
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">{n.title}</p>
                   {n.body && <p className="text-sm text-[var(--text-muted)]">{n.body}</p>}
                 </div>
+                {n.link && (
+                  <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-[var(--text-muted)]" />
+                )}
               </CardContent>
-            </Card>
-          ))}
+            );
+            return n.link ? (
+              <Link key={n.id} href={n.link} className="block">
+                <Card className="transition-colors hover:border-[var(--accent)]">{inner}</Card>
+              </Link>
+            ) : (
+              <Card key={n.id}>{inner}</Card>
+            );
+          })}
         </div>
       )}
     </div>
