@@ -250,6 +250,8 @@ export async function finalizeTeaching(input: {
   storagePath?: string;
   /** Set for a link teaching. */
   externalUrl?: string;
+  /** The file's size as the browser saw it, so a truncated upload is caught. */
+  sizeBytes?: number;
 }): Promise<CreateTeachingResult> {
   await requireTrainingManager();
 
@@ -291,6 +293,23 @@ export async function finalizeTeaching(input: {
     if (listErr) throw new Error(`Could not verify the upload: ${listErr.message}`);
     if (!listed || listed.length === 0) {
       throw new Error("The uploaded file wasn't found in storage — please try again.");
+    }
+
+    // Existence isn't enough. A signed upload that dies part-way can leave a
+    // zero-byte or truncated object behind, and the row recorded against it
+    // then renders a player that sits at 0:00 forever with nothing to say why.
+    // Check the bytes actually landed.
+    const stored = Number(listed[0]?.metadata?.size ?? 0);
+    if (stored === 0) {
+      await admin.storage.from("training").remove([storagePath]);
+      throw new Error("The upload arrived empty — please try again.");
+    }
+    if (input.sizeBytes && stored < input.sizeBytes) {
+      await admin.storage.from("training").remove([storagePath]);
+      const pct = Math.round((stored / input.sizeBytes) * 100);
+      throw new Error(
+        `Only ${pct}% of the file uploaded before the connection dropped. Please try again.`
+      );
     }
   }
 

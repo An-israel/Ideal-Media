@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/toaster";
 import { formatDuration } from "@/lib/format";
+import { contentTypeForUpload } from "@/lib/media-type";
 import {
   ACCEPTED_TEACHING_AUDIO,
   ACCEPTED_TEACHING_VIDEO,
@@ -339,7 +340,7 @@ function AddTeachingForm({
       const { error: uploadErr } = await supabase.storage
         .from("training")
         .uploadToSignedUrl(target.path, target.token, file, {
-          contentType: file.type || (mediaType === "video" ? "video/mp4" : "audio/mpeg"),
+          contentType: contentTypeForUpload(file.name, mediaType, file.type),
         });
       if (uploadErr) throw new Error(`Upload failed: ${uploadErr.message}`);
 
@@ -351,6 +352,7 @@ function AddTeachingForm({
           description,
           mediaType,
           storagePath: target.path,
+          sizeBytes: file.size,
         })
       );
       if (ok) onDone();

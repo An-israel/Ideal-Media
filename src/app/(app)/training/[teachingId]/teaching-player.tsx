@@ -57,6 +57,7 @@ export function TeachingPlayer({
   const [isComplete, setIsComplete] = useState(completed);
   const [totalListened, setTotalListened] = useState(listenedSeconds);
   const [duration, setDuration] = useState(durationSeconds ?? 0);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [position, setPosition] = useState(furthestSeconds);
   const [marking, setMarking] = useState(false);
 
@@ -120,7 +121,29 @@ export function TeachingPlayer({
     };
   }, [flush]);
 
+  /**
+   * Surfaces a media failure instead of leaving a dead player at 0:00.
+   *
+   * Without this the element failed silently: controls rendered, the timeline
+   * read 0:00 / 0:00, and nothing said whether the file was missing, the signed
+   * URL had expired, or the browser couldn't decode it.
+   */
+  function onMediaError() {
+    const el = mediaRef.current;
+    const code = el?.error?.code;
+    setLoadError(
+      code === 2
+        ? "The connection dropped while loading this teaching. Check your internet and reload the page."
+        : code === 3
+        ? "This file is damaged or in a format this browser can't decode. It may need to be re-uploaded."
+        : code === 4
+        ? "This teaching's file couldn't be opened. The link may have expired — reload the page to get a fresh one. If it still fails, the file needs to be re-uploaded."
+        : "This teaching couldn't be played."
+    );
+  }
+
   function onLoadedMetadata() {
+    setLoadError(null);
     const el = mediaRef.current;
     if (!el) return;
     if (Number.isFinite(el.duration) && el.duration > 0) setDuration(el.duration);
@@ -232,6 +255,7 @@ export function TeachingPlayer({
             preload="metadata"
             className="w-full rounded-xl bg-black"
             onLoadedMetadata={onLoadedMetadata}
+            onError={onMediaError}
             onTimeUpdate={onTimeUpdate}
             onSeeked={onSeeked}
             onPause={() => void flush()}
@@ -245,11 +269,31 @@ export function TeachingPlayer({
             preload="metadata"
             className="w-full"
             onLoadedMetadata={onLoadedMetadata}
+            onError={onMediaError}
             onTimeUpdate={onTimeUpdate}
             onSeeked={onSeeked}
             onPause={() => void flush()}
             onEnded={() => void flush({ force: true })}
           />
+        )}
+
+        {loadError && (
+          <div className="space-y-2 rounded-xl border border-[var(--danger)]/30 bg-[var(--danger)]/10 px-4 py-3">
+            <p className="text-sm text-[var(--danger)]">{loadError}</p>
+            {mediaUrl && (
+              // Opening the file straight from storage separates "the file is
+              // bad" from "the player is bad" in one click, and lets the person
+              // listen in the meantime.
+              <a
+                href={mediaUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm underline"
+              >
+                <ExternalLink className="h-3 w-3" /> Open the file directly
+              </a>
+            )}
+          </div>
         )}
 
         <div className="space-y-2">
