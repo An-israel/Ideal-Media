@@ -24,6 +24,7 @@ import {
   setSeriesPublished,
   deleteSeries,
   prepareTeachingUpload,
+  publishAllTeachings,
   finalizeTeaching,
   updateTeaching,
   setTeachingPublished,
@@ -163,6 +164,7 @@ function SeriesCard({
   const [description, setDescription] = useState(series.description ?? "");
   const [addingTeaching, setAddingTeaching] = useState(false);
   const dirty = title !== series.title || description !== (series.description ?? "");
+  const drafts = series.teachings.filter((t) => !t.isPublished).length;
 
   return (
     <Card>
@@ -232,6 +234,23 @@ function SeriesCard({
       </CardHeader>
 
       <CardContent className="space-y-3">
+        {drafts > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--warning)]/30 bg-[var(--warning)]/10 px-3 py-2">
+            <p className="text-sm text-[var(--warning)]">
+              {drafts} {drafts === 1 ? "teaching is" : "teachings are"} still a draft
+              {series.isPublished
+                ? " — members can't see them, even though the series is published."
+                : ", and this series isn't published either."}
+            </p>
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => run("Published", () => publishAllTeachings(series.id))}
+            >
+              Publish {drafts === 1 ? "it" : "all"}
+            </Button>
+          </div>
+        )}
         {series.teachings.length === 0 ? (
           <p className="text-sm text-[var(--text-muted)]">No teachings in this series yet.</p>
         ) : (

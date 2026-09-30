@@ -312,6 +312,13 @@ export async function finalizeTeaching(input: {
       media_type: input.mediaType,
       storage_path: storagePath,
       external_url: externalUrl,
+      // Live as soon as it's added. The SERIES is the gate — a teaching you
+      // just uploaded into it is part of it. Defaulting this to false meant
+      // "Add a teaching" appeared to work, reported success, and then showed
+      // nothing on /training with no hint that a second, separate Publish was
+      // waiting one row below. Hold an individual part back with its own
+      // Unpublish button if you need to.
+      is_published: true,
     })
     .select("id")
     .single();
@@ -367,6 +374,30 @@ export async function setTeachingPublished(teachingId: string, publish: boolean)
 }
 
 /** Deletes a teaching and its media. Refuses once it has listen history. */
+/**
+ * Publishes every draft teaching in a series in one go.
+ *
+ * Exists because "the series is published but members see nothing" is only
+ * ever caused by teachings still sitting as drafts, and fixing that one row at
+ * a time is busywork.
+ */
+export async function publishAllTeachings(seriesId: string): Promise<{ published: number }> {
+  await requireTrainingManager();
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("training_teachings")
+    .update({ is_published: true })
+    .eq("series_id", seriesId)
+    .eq("is_published", false)
+    .select("id");
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/training/manage");
+  revalidatePath("/training");
+  revalidatePath("/dashboard");
+  return { published: (data ?? []).length };
+}
+
 export async function deleteTeaching(teachingId: string) {
   await requireTrainingManager();
   const admin = createAdminClient();

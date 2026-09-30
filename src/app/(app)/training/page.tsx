@@ -56,6 +56,20 @@ export default async function TrainingPage() {
             <p className="text-sm text-[var(--text-muted)]">
               No training has been published yet. It will appear here when it does.
             </p>
+            {canManage && (
+              // A manager landing here has almost always added a teaching and
+              // is wondering where it went. Name the two switches instead of
+              // repeating the member-facing message at them.
+              <p className="max-w-md text-sm text-[var(--text-muted)]">
+                Added one already? A teaching shows here only when both its{" "}
+                <strong>series</strong> and the teaching itself are published —
+                open{" "}
+                <Link href="/training/manage" className="underline">
+                  Manage
+                </Link>{" "}
+                and look for anything still marked <strong>Draft</strong>.
+              </p>
+            )}
           </CardContent>
         </Card>
       ) : (
