@@ -17,6 +17,7 @@ export function ReportView({
   reportText,
   breakdownText,
   missingSubunits,
+  unassigned,
   totals,
   subunits,
 }: {
@@ -26,6 +27,7 @@ export function ReportView({
   reportText: string;
   breakdownText: string;
   missingSubunits: string[];
+  unassigned: string[];
   totals: { total: number; present: number; absent: number; onIt: number };
   subunits: SubunitBreakdownRow[];
 }) {
@@ -88,6 +90,20 @@ export function ReportView({
             {missingSubunits.length === 1 ? "subunit has" : "subunits have"} not submitted:{" "}
             <strong>{missingSubunits.join(", ")}</strong>. Their members are counted absent with
             no reason until they do.
+          </span>
+        </p>
+      )}
+
+      {unassigned.length > 0 && (
+        <p className="flex items-start gap-2 rounded-xl border border-[var(--warning)]/30 bg-[var(--warning)]/10 px-4 py-3 text-sm text-[var(--warning)]">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            {unassigned.length}{" "}
+            {unassigned.length === 1 ? "person is" : "people are"} on the roll but no subunit
+            reports on them, so they are in nobody&apos;s count:{" "}
+            <strong>{unassigned.slice(0, 8).join(", ")}</strong>
+            {unassigned.length > 8 && ` and ${unassigned.length - 8} more`}. Give them a primary
+            subunit in Secretary → Roster.
           </span>
         </p>
       )}

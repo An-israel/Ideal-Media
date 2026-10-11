@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/pagination";
+import { resolveReportingSubunits } from "@/lib/reporting-subunit";
 import { buildReport, type ReportPerson, type SubunitBreakdownRow } from "@/lib/attendance-report";
 import type { AbsenceReason, AttendanceStatus } from "@/lib/database.types";
 
@@ -13,10 +14,14 @@ export interface RosterPerson {
 }
 
 /**
- * Everyone a subunit reports on: its PRIMARY members only.
+ * Everyone a subunit reports on.
  *
- * A person can sit in up to four subunits but is reported by exactly one, so
- * the department total is the sum of the subunits with nobody counted twice.
+ * Membership alone does not decide this — resolveReportingSubunit() does, so
+ * that each person lands on exactly one list. In practice that means a
+ * subunit's primary members, plus any leader of it who has no primary subunit
+ * of their own (promoting someone to lead a subunit they weren't in adds them
+ * as a *secondary* member, which used to leave them missing from the very list
+ * they had to fill in).
  *
  * Graduated and left members are off the roll entirely. Traveled members stay
  * on it — they are pre-marked rather than hidden, so they never silently drop
@@ -26,34 +31,110 @@ export async function getSubunitRoster(subunitIds: string[]): Promise<RosterPers
   if (subunitIds.length === 0) return [];
   const admin = createAdminClient();
 
-  type Row = {
+  type MemberRow = {
     user_id: string;
     subunit_id: string;
-    profiles: { full_name: string; member_status: string } | null;
-    subunits: { name: string } | null;
+    membership_type: "primary" | "secondary";
+    role_in_subunit: "member" | "leader";
   };
 
-  const rows = await fetchAllRows<Row>((from, to) =>
+  // Anyone attached to one of these subunits in any capacity is a candidate.
+  const candidates = await fetchAllRows<{ user_id: string }>((from, to) =>
+    admin.from("subunit_members").select("user_id").in("subunit_id", subunitIds).range(from, to)
+  );
+  const candidateIds = [...new Set(candidates.map((c) => c.user_id))];
+  if (candidateIds.length === 0) return [];
+
+  // Their memberships EVERYWHERE, because where a person is reported depends on
+  // whether they hold a primary membership in some other subunit.
+  const memberships = await fetchAllRows<MemberRow>((from, to) =>
     admin
       .from("subunit_members")
-      .select("user_id, subunit_id, profiles(full_name, member_status), subunits(name)")
-      .eq("membership_type", "primary")
-      .in("subunit_id", subunitIds)
-      .range(from, to) as unknown as PromiseLike<{
-      data: Row[] | null;
-      error: { message: string } | null;
-    }>
+      .select("user_id, subunit_id, membership_type, role_in_subunit")
+      .in("user_id", candidateIds)
+      .range(from, to)
   );
 
-  return rows
-    .filter((r) => r.profiles && !["graduated", "left"].includes(r.profiles.member_status))
-    .map((r) => ({
-      userId: r.user_id,
-      fullName: r.profiles!.full_name,
-      subunitId: r.subunit_id,
-      subunitName: r.subunits?.name ?? "—",
-      memberStatus: r.profiles!.member_status,
+  const reporting = resolveReportingSubunits(
+    memberships.map((m) => ({
+      userId: m.user_id,
+      subunitId: m.subunit_id,
+      membershipType: m.membership_type,
+      roleInSubunit: m.role_in_subunit,
     }))
+  );
+
+  const wanted = new Set(subunitIds);
+  const userIds = candidateIds.filter((id) => {
+    const s = reporting.get(id);
+    return s !== undefined && wanted.has(s);
+  });
+  if (userIds.length === 0) return [];
+
+  const [profiles, { data: subunitRows }] = await Promise.all([
+    fetchAllRows<{ id: string; full_name: string; member_status: string }>((from, to) =>
+      admin
+        .from("profiles")
+        .select("id, full_name, member_status")
+        .in("id", userIds)
+        .range(from, to)
+    ),
+    admin.from("subunits").select("id, name"),
+  ]);
+  const subunitName = new Map((subunitRows ?? []).map((s) => [s.id, s.name]));
+
+  return profiles
+    .filter((p) => !["graduated", "left"].includes(p.member_status))
+    .map((p) => {
+      const subunitId = reporting.get(p.id)!;
+      return {
+        userId: p.id,
+        fullName: p.full_name,
+        subunitId,
+        subunitName: subunitName.get(subunitId) ?? "\u2014",
+        memberStatus: p.member_status,
+      };
+    })
+    .sort((a, b) => a.fullName.localeCompare(b.fullName));
+}
+
+/**
+ * People on the roll that no subunit reports on — no primary membership and no
+ * leadership anywhere. They are invisible to attendance until somebody sets
+ * their primary subunit, so the report names them rather than losing them.
+ */
+export async function getUnassignedMembers(): Promise<{ userId: string; fullName: string }[]> {
+  const admin = createAdminClient();
+  const [profiles, memberships] = await Promise.all([
+    fetchAllRows<{ id: string; full_name: string; member_status: string }>((from, to) =>
+      admin.from("profiles").select("id, full_name, member_status").range(from, to)
+    ),
+    fetchAllRows<{
+      user_id: string;
+      subunit_id: string;
+      membership_type: "primary" | "secondary";
+      role_in_subunit: "member" | "leader";
+    }>((from, to) =>
+      admin
+        .from("subunit_members")
+        .select("user_id, subunit_id, membership_type, role_in_subunit")
+        .range(from, to)
+    ),
+  ]);
+
+  const reporting = resolveReportingSubunits(
+    memberships.map((m) => ({
+      userId: m.user_id,
+      subunitId: m.subunit_id,
+      membershipType: m.membership_type,
+      roleInSubunit: m.role_in_subunit,
+    }))
+  );
+
+  return profiles
+    .filter((p) => !["graduated", "left"].includes(p.member_status))
+    .filter((p) => !reporting.has(p.id))
+    .map((p) => ({ userId: p.id, fullName: p.full_name }))
     .sort((a, b) => a.fullName.localeCompare(b.fullName));
 }
 

@@ -1,6 +1,10 @@
 import { notFound } from "next/navigation";
 import { getSessionRoles } from "@/lib/auth";
-import { getServiceActivities, getReportData } from "@/lib/attendance-queries";
+import {
+  getServiceActivities,
+  getReportData,
+  getUnassignedMembers,
+} from "@/lib/attendance-queries";
 import { openServiceDates } from "@/lib/attendance-window";
 import { formatReportText, formatSubunitBreakdown } from "@/lib/attendance-report";
 import { PageHeader } from "@/components/app/page-header";
@@ -39,7 +43,10 @@ export default async function AttendanceReportPage({
     );
   }
 
-  const report = await getReportData(activityId, serviceDate);
+  const [report, unassigned] = await Promise.all([
+    getReportData(activityId, serviceDate),
+    getUnassignedMembers(),
+  ]);
 
   return (
     <div>
@@ -54,6 +61,7 @@ export default async function AttendanceReportPage({
         reportText={formatReportText(report)}
         breakdownText={formatSubunitBreakdown(report)}
         missingSubunits={report.missingSubunits}
+        unassigned={unassigned.map((u) => u.fullName)}
         totals={{
           total: report.totalMembers,
           present: report.present,
