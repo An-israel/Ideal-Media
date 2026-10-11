@@ -40,6 +40,7 @@ function sectionsFor(roles: Role[]): Section[] {
         "**Approvals** — review submissions and course applications.",
         "**Members** — each person's progress, attendance, performance and training.",
         "**Subunits → Review change requests** — approve someone moving into or out of your unit.",
+        "**Attendance** 🗓️ — each Sunday and Bible Study, tick who was present and give a reason for each absence. Sunday is due **Monday 8PM**, Bible Study **Thursday 8PM** (WAT). After the deadline you can still submit, but it is marked late and corrections then go through the secretary or welfare.",
         "**General Training → See who's listened** — who in your unit still hasn't been through it.",
       ],
     });
@@ -50,6 +51,7 @@ function sectionsFor(roles: Role[]): Section[] {
       title: "Secretary",
       steps: [
         "**Attendance** — pick activity + date, upload a sheet **or snap photos** 📸 (every tab of a workbook is read). AI maps names → review → **Commit**. Committed by mistake? **Reopen** it.",
+        "**Attendance → Paste an absentee list** 📋 — paste the report you already write each week. Everyone named is marked absent under their heading, everyone else present. You see exactly what it will change before anything is saved.",
         "**Roster** — set member status. “Traveled” skips missed-service flags.",
         "**General Training** 🎧 — add teachings, publish them, and see exactly who has and hasn't listened.",
         "**Subunits → Review change requests** — approve members moving between units.",

@@ -9,6 +9,7 @@ import {
   Network,
   Users,
   ClipboardList,
+  CalendarCheck,
   HeartHandshake,
   Shield,
   UserRound,
@@ -30,6 +31,15 @@ const ITEMS: NavItem[] = [
   { href: "/training", label: "General Training", icon: Headphones },
   { href: "/courses", label: "My Courses", icon: GraduationCap },
   { href: "/subunits", label: "Subunits", icon: Network },
+  // Weekly attendance reporting. Subunit leaders report their own people;
+  // secretary and welfare can report for any subunit and paste the department
+  // absentee list.
+  {
+    href: "/attendance",
+    label: "Attendance",
+    icon: CalendarCheck,
+    roles: ["subunit_leader", "secretary", "welfare", "super_admin"],
+  },
   { href: "/leader", label: "Leader", icon: Users, roles: ["subunit_leader", "super_admin"] },
   { href: "/secretary", label: "Secretary", icon: ClipboardList, roles: ["secretary", "super_admin"] },
   { href: "/welfare", label: "Welfare", icon: HeartHandshake, roles: ["welfare", "super_admin"] },

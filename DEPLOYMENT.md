@@ -147,11 +147,13 @@ branch can hold that role.
 
 ### One environment variable that is easy to miss
 
-`CRON_SECRET` — the daily birthday-reminder route (`/api/cron/birthdays`)
-refuses to run without it, on purpose, so nobody on the internet can trigger
-it. Set it in Vercel → **Settings → Environment Variables** to any long random
-string, then redeploy. Until you do, birthday notifications simply never fire
-and the route answers `503`.
+`CRON_SECRET` — **two** scheduled jobs refuse to run without it, on purpose, so
+nobody on the internet can trigger them: the daily birthday reminder
+(`/api/cron/birthdays`) and the attendance deadline reminders
+(`/api/cron/attendance-reminders`). Set it in Vercel → **Settings → Environment
+Variables** to any long random string, then redeploy. Until you do, both answer
+`503` — birthday notifications never fire, and leaders are never nudged before
+the Monday/Thursday 8PM attendance deadlines.
 
 ---
 

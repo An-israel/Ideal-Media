@@ -135,6 +135,40 @@ Because the whole submission route depends on one phone number:
   subunit's longest-standing leader), which nobody could see or change. Now a
   leader picks the instructor from a dropdown, so a course can be handed over.
 
+## Weekly attendance reporting
+
+Replaces the hand-typed WhatsApp report. Two ways in, one set of numbers.
+
+**A subunit leader** opens Attendance, ticks who was present for Sunday Service
+or Bible Study, and picks a reason for each absence. Only their own subunit's
+**primary** members appear, so nobody is counted twice and the department total
+is the sum of the subunits. Traveled members are pre-marked rather than hidden.
+A week with no service is closed with one button and a reason.
+
+**Welfare or the secretary** can instead paste the absentee report they already
+write. Everyone named is marked absent under their heading; everyone else on the
+roll is marked present. Because that list is department-wide and overwrites what
+leaders submitted, the paste shows a full diff first — how many move from present
+to absent, which names it could not match, and any heading whose stated count
+disagrees with the names under it.
+
+**You** get the report back out in the same format you have always sent, ready to
+copy into the Pastors' chat, with a per-subunit breakdown underneath naming any
+subunit that has not submitted.
+
+Deadlines are **Monday 8PM** for Sunday Service and **Thursday 8PM** for Bible
+Study, West Africa Time. Late submissions are accepted and stamped late rather
+than refused. Leaders are reminded on the morning and again two hours before;
+only those who still owe a report are notified.
+
+Everything writes into the existing `attendance_records`, so these submissions
+feed the welfare missed-service flags, the monthly totals and the secretary grid.
+Bible Study now counts toward welfare follow-ups alongside Sunday Service.
+
+Absence categories come from the department's own report headings: Illness,
+Travelled, Academic/School, On IT, Unreachable, Not Responding, No Valid Reason,
+Other Reasons, Withdrawn, Inconsistent.
+
 ## Subunits: joining and moving
 
 Members manage their own memberships at `/subunits`:

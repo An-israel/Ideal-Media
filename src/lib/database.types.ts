@@ -34,7 +34,22 @@ export type ModuleProgressStatus =
   | "approved";
 export type UploadStatus = "parsing" | "needs_review" | "committed" | "discarded";
 export type AttendanceStatus = "present" | "absent" | "traveled" | "excused";
-export type AttendanceSource = "sheet_upload" | "manual";
+export type AbsenceReason =
+  | "illness"
+  | "travelled"
+  | "academic"
+  | "on_it"
+  | "unreachable"
+  | "not_responding"
+  | "no_valid_reason"
+  | "other"
+  | "withdrawn"
+  | "inconsistent";
+export type AttendanceSource =
+  | "sheet_upload"
+  | "manual"
+  | "leader_submission"
+  | "absentee_paste";
 export type WelfareReason = "new_member" | "missed_service" | "traveled" | "inactive";
 export type WelfareStatus = "pending" | "in_progress" | "contacted" | "resolved";
 export type TeachingMediaType = "audio" | "video" | "link";
@@ -221,6 +236,29 @@ export type AttendanceRecord = {
   status: AttendanceStatus;
   source: AttendanceSource;
   upload_id: string | null;
+  /** Which heading this person falls under in the absentee report. */
+  absence_reason: AbsenceReason | null;
+  /** The detail that follows the name ("travelled to Enugu, back Wednesday"). */
+  absence_note: string | null;
+  recorded_by: string | null;
+  recorded_at: string;
+  created_at: string;
+};
+
+export type AttendanceSubmission = {
+  id: string;
+  subunit_id: string;
+  activity_id: string;
+  service_date: string;
+  submitted_by: string | null;
+  submitted_at: string;
+  is_late: boolean;
+  no_service: boolean;
+  no_service_reason: string | null;
+  present_count: number;
+  absent_count: number;
+  amended_by: string | null;
+  amended_at: string | null;
   created_at: string;
 };
 
@@ -379,6 +417,7 @@ export type Database = {
       activities: TableDef<Activity>;
       attendance_uploads: TableDef<AttendanceUpload>;
       attendance_records: TableDef<AttendanceRecord>;
+      attendance_submissions: TableDef<AttendanceSubmission>;
       monthly_attendance_summary: TableDef<MonthlyAttendanceSummary>;
       training_series: TableDef<TrainingSeries>;
       training_teachings: TableDef<TrainingTeaching>;
@@ -401,6 +440,10 @@ export type Database = {
       subunit_member_counts: {
         Args: Record<string, never>;
         Returns: { subunit_id: string; member_count: number }[];
+      };
+      attendance_roll_total: {
+        Args: Record<string, never>;
+        Returns: number;
       };
       course_instructors: {
         Args: Record<string, never>;
