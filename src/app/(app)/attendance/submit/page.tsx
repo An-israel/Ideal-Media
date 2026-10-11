@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { getSessionRoles } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSubunitRoster, getRecordsFor } from "@/lib/attendance-queries";
-import { deadlineFor, formatWAT, isLate } from "@/lib/attendance-window";
+import { deadlineFor, formatWAT, isLate, hasOccurred } from "@/lib/attendance-window";
 import { formatReportDate } from "@/lib/attendance-report";
 import { PageHeader } from "@/components/app/page-header";
 import { SubmitForm, type FormMember } from "./submit-form";
@@ -14,6 +14,9 @@ export default async function SubmitAttendancePage({
 }) {
   const { subunit, activity, date } = await searchParams;
   if (!subunit || !activity || !date) notFound();
+  // Any past date is fair game — reporting is weekly and a missed week must
+  // stay fileable — but a service still to come has nothing to report.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !hasOccurred(date)) notFound();
 
   const session = await getSessionRoles();
   if (!session) return null;

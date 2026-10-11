@@ -3,14 +3,27 @@ import { ClipboardList, FileText, ClipboardPaste, AlertTriangle, CheckCircle2 } 
 import { getSessionRoles } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getServiceActivities, getSubmissions } from "@/lib/attendance-queries";
-import { openServiceDates, deadlineFor, formatWAT, isLate } from "@/lib/attendance-window";
+import {
+  weekServices,
+  sundayOfWeek,
+  currentWeekSunday,
+  hasOccurred,
+  deadlineFor,
+  formatWAT,
+  isLate,
+} from "@/lib/attendance-window";
+import { WeekPicker } from "./week-picker";
 import { formatReportDate } from "@/lib/attendance-report";
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export default async function AttendanceHubPage() {
+export default async function AttendanceHubPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ week?: string }>;
+}) {
   const session = await getSessionRoles();
   if (!session) return null;
 
@@ -23,7 +36,16 @@ export default async function AttendanceHubPage() {
 
   const admin = createAdminClient();
   const { sunday, bibleStudy } = await getServiceActivities();
-  const dates = openServiceDates();
+
+  // Any week is reachable: reporting is a standing weekly job, so a missed week
+  // has to stay fileable and an old one correctable. An unparseable ?week=
+  // falls back to this week rather than erroring.
+  const { week } = await searchParams;
+  const thisWeek = currentWeekSunday();
+  const weekSunday = /^\d{4}-\d{2}-\d{2}$/.test(week ?? "")
+    ? sundayOfWeek(week!)
+    : thisWeek;
+  const dates = weekServices(weekSunday);
 
   // Which subunits this person is responsible for.
   const { data: allSubunits } = await admin.from("subunits").select("id, name").order("name");
@@ -62,11 +84,23 @@ export default async function AttendanceHubPage() {
         </div>
       )}
 
+      <WeekPicker
+        basePath="/attendance"
+        weekSunday={weekSunday}
+        currentWeek={thisWeek}
+        label={
+          weekSunday === thisWeek
+            ? `This week — ${formatReportDate(dates.sunday)} to ${formatReportDate(dates.wednesday)}`
+            : `Week of ${formatReportDate(dates.sunday)}`
+        }
+      />
+
       <div className="space-y-6">
         {services.map((s, i) => {
           const submissions = submissionsByService[i];
           const deadline = deadlineFor(s.date);
-          const overdue = isLate(s.date);
+          const held = hasOccurred(s.date);
+          const overdue = held && isLate(s.date);
           const outstanding = mine.filter((su) => !submissions.has(su.id));
 
           return (
@@ -76,7 +110,9 @@ export default async function AttendanceHubPage() {
                   <CardTitle className="text-base">
                     {s.label} — {formatReportDate(s.date)}
                   </CardTitle>
-                  {outstanding.length === 0 ? (
+                  {!held ? (
+                    <Badge variant="neutral">Not held yet</Badge>
+                  ) : outstanding.length === 0 ? (
                     <Badge variant="success">All in</Badge>
                   ) : overdue ? (
                     <Badge variant="danger">Overdue</Badge>
@@ -85,8 +121,14 @@ export default async function AttendanceHubPage() {
                   )}
                 </div>
                 <p className="text-sm text-[var(--text-muted)]">
-                  Due {formatWAT(deadline)} WAT
-                  {overdue && " — submissions are still accepted and will be marked late."}
+                  {held ? (
+                    <>
+                      Due {formatWAT(deadline)} WAT
+                      {overdue && " — submissions are still accepted and will be marked late."}
+                    </>
+                  ) : (
+                    <>This service hasn&apos;t happened yet. It opens on the day.</>
+                  )}
                 </p>
               </CardHeader>
 
@@ -119,14 +161,20 @@ export default async function AttendanceHubPage() {
                       ) : (
                         <Badge variant="neutral">Pending</Badge>
                       )}
-                      <Link
-                        href={`/attendance/submit?subunit=${su.id}&activity=${s.activity.id}&date=${s.date}`}
-                      >
-                        <Button size="sm" variant={sub ? "outline" : "default"}>
-                          <ClipboardList className="h-4 w-4" />
-                          {sub ? "Edit" : "Submit"}
+                      {held ? (
+                        <Link
+                          href={`/attendance/submit?subunit=${su.id}&activity=${s.activity.id}&date=${s.date}`}
+                        >
+                          <Button size="sm" variant={sub ? "outline" : "default"}>
+                            <ClipboardList className="h-4 w-4" />
+                            {sub ? "Edit" : "Submit"}
+                          </Button>
+                        </Link>
+                      ) : (
+                        <Button size="sm" variant="outline" disabled>
+                          <ClipboardList className="h-4 w-4" /> Submit
                         </Button>
-                      </Link>
+                      )}
                     </div>
                   );
                 })}

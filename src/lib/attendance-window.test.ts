@@ -9,6 +9,11 @@ import {
   finalReminderFor,
   SUNDAY,
   WEDNESDAY,
+  sundayOfWeek,
+  weekServices,
+  shiftWeeks,
+  hasOccurred,
+  currentWeekSunday,
 } from "./attendance-window";
 
 // The two real reports in the fixtures are for Sunday 4/10/2026 and Wednesday
@@ -118,5 +123,59 @@ describe("formatWAT", () => {
   it("renders midnight and noon correctly", () => {
     expect(formatWAT(new Date("2026-10-04T23:00:00Z"))).toContain("12:00AM");
     expect(formatWAT(new Date("2026-10-04T11:00:00Z"))).toContain("12:00PM");
+  });
+});
+
+describe("week navigation", () => {
+  it("finds the Sunday that opens a week", () => {
+    expect(sundayOfWeek("2026-10-04")).toBe("2026-10-04"); // a Sunday itself
+    expect(sundayOfWeek("2026-10-07")).toBe("2026-10-04"); // the Wednesday after
+    expect(sundayOfWeek("2026-10-10")).toBe("2026-10-04"); // the Saturday after
+    expect(sundayOfWeek("2026-10-11")).toBe("2026-10-11"); // the next Sunday
+  });
+
+  it("pairs each Sunday with the Wednesday of the same reporting week", () => {
+    expect(weekServices("2026-10-04")).toEqual({
+      sunday: "2026-10-04",
+      wednesday: "2026-10-07",
+    });
+  });
+
+  it("steps backwards and forwards by whole weeks", () => {
+    expect(shiftWeeks("2026-10-04", -1)).toBe("2026-09-27");
+    expect(shiftWeeks("2026-10-04", 1)).toBe("2026-10-11");
+    expect(shiftWeeks("2026-10-04", -5)).toBe("2026-08-30");
+  });
+
+  it("steps across a month and a year boundary", () => {
+    expect(shiftWeeks("2026-01-03", -1)).toBe("2025-12-27");
+    expect(shiftWeeks("2026-12-27", 1)).toBe("2027-01-03");
+  });
+
+  it("keeps every step landing on a Sunday", () => {
+    let d = "2026-10-04";
+    for (let i = 0; i < 60; i++) {
+      d = shiftWeeks(d, -1);
+      const [y, m, day] = d.split("-").map(Number);
+      expect(new Date(Date.UTC(y, m - 1, day)).getUTCDay(), `${d} is not a Sunday`).toBe(0);
+    }
+  });
+
+  it("knows whether a service has been held yet", () => {
+    const monday = new Date("2026-10-05T10:00:00Z");
+    expect(hasOccurred("2026-10-04", monday)).toBe(true); // yesterday's Sunday
+    expect(hasOccurred("2026-10-05", monday)).toBe(true); // today
+    expect(hasOccurred("2026-10-07", monday)).toBe(false); // Wednesday to come
+  });
+
+  it("uses the WAT day when deciding what is still in the future", () => {
+    // 23:30Z on the 6th is already the 7th in WAT, so Wednesday has arrived.
+    expect(hasOccurred("2026-10-07", new Date("2026-10-06T23:30:00Z"))).toBe(true);
+    expect(hasOccurred("2026-10-07", new Date("2026-10-06T22:00:00Z"))).toBe(false);
+  });
+
+  it("reports the current week from any day in it", () => {
+    expect(currentWeekSunday(new Date("2026-10-08T10:00:00Z"))).toBe("2026-10-04");
+    expect(currentWeekSunday(new Date("2026-10-04T06:00:00Z"))).toBe("2026-10-04");
   });
 });

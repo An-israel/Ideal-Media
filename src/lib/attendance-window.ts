@@ -89,3 +89,54 @@ export function openServiceDates(today: Date = new Date()): {
 } {
   return { sunday: mostRecent(SUNDAY, today), wednesday: mostRecent(WEDNESDAY, today) };
 }
+
+// ------------------------------------------------------- week navigation --
+
+/** Shifts an ISO date by whole days, with no timezone round-trip. */
+export function addDays(iso: string, days: number): string {
+  const { y, m, d } = parseISODate(iso);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+/** Today's calendar date in WAT, which is what "this week" means to the team. */
+export function todayWAT(now: Date = new Date()): string {
+  return new Date(now.getTime() + WAT_OFFSET_HOURS * 3600_000).toISOString().slice(0, 10);
+}
+
+/**
+ * The Sunday that opens the week containing `iso`.
+ *
+ * A reporting week runs Sunday → the Wednesday three days later, because that
+ * is how the two services pair up in practice: Sunday Service on the 4th and
+ * Bible Study on the 7th belong to the same week's reporting.
+ */
+export function sundayOfWeek(iso: string): string {
+  const { y, m, d } = parseISODate(iso);
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return addDays(iso, -dow);
+}
+
+/** The two service dates of the week beginning on `sunday`. */
+export function weekServices(sunday: string): { sunday: string; wednesday: string } {
+  return { sunday, wednesday: addDays(sunday, 3) };
+}
+
+/** Steps a week's Sunday forward or back by whole weeks. */
+export function shiftWeeks(sunday: string, weeks: number): string {
+  return addDays(sunday, weeks * 7);
+}
+
+/**
+ * Whether a service has already happened.
+ *
+ * Attendance for a service that has not been held yet cannot be reported, so
+ * the form is closed for a future date rather than inviting invented data.
+ */
+export function hasOccurred(serviceDate: string, now: Date = new Date()): boolean {
+  return serviceDate <= todayWAT(now);
+}
+
+/** The current reporting week, in WAT. */
+export function currentWeekSunday(now: Date = new Date()): string {
+  return sundayOfWeek(todayWAT(now));
+}

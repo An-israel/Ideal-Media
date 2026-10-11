@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionRoles } from "@/lib/auth";
 import { chunk } from "@/lib/pagination";
-import { isLate } from "@/lib/attendance-window";
+import { isLate, hasOccurred } from "@/lib/attendance-window";
 import { parseAbsenteeReport, checkDeclaredCounts } from "@/lib/absentee-parse";
 import { buildNameIndex, matchAll } from "@/lib/name-match";
 import { getSubunitRoster, getDepartmentRoster, getRecordsFor } from "@/lib/attendance-queries";
@@ -50,6 +50,20 @@ async function authorizeDepartment() {
   return session;
 }
 
+/**
+ * Refuses a service date that has not arrived yet.
+ *
+ * Every page hides the form for a future service, but the date travels in the
+ * URL, so the rule is enforced here too — recording who attended a service
+ * nobody has held is invented data, and it would also open welfare follow-ups
+ * for an absence that has not happened.
+ */
+function assertServiceHeld(serviceDate: string) {
+  if (!hasOccurred(serviceDate)) {
+    throw new Error("That service hasn't happened yet, so there is nothing to report.");
+  }
+}
+
 export interface AttendanceMark {
   userId: string;
   status: AttendanceStatus;
@@ -72,6 +86,7 @@ export async function submitAttendance(input: {
 }): Promise<ActionResult> {
   try {
     const { session, privileged } = await authorizeSubunit(input.subunitId);
+    assertServiceHeld(input.serviceDate);
     const admin = createAdminClient();
 
     // Never trust the client's list of people: rebuild it from the roster, so a
@@ -183,6 +198,7 @@ export async function markNoService(input: {
 }): Promise<ActionResult> {
   try {
     const { session } = await authorizeSubunit(input.subunitId);
+    assertServiceHeld(input.serviceDate);
     const admin = createAdminClient();
 
     const { error } = await admin.from("attendance_submissions").upsert(
@@ -266,6 +282,7 @@ export async function previewAbsenteePaste(input: {
 }): Promise<{ ok: true; preview: PastePreview } | { ok: false; error: string }> {
   try {
     await authorizeDepartment();
+    assertServiceHeld(input.serviceDate);
     const parsed = parseAbsenteeReport(input.text);
     if (parsed.absentees.length === 0) {
       return {
@@ -336,6 +353,7 @@ export async function commitAbsenteePaste(input: {
 }): Promise<ActionResult & { present?: number; absent?: number }> {
   try {
     const session = await authorizeDepartment();
+    assertServiceHeld(input.serviceDate);
     const admin = createAdminClient();
     const roster = await getDepartmentRoster();
     const onRoll = new Set(roster.map((r) => r.userId));
