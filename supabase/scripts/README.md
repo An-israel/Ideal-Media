@@ -13,7 +13,21 @@ click **Run**, in this order. Scripts 1 and 4 change nothing on their own.
 | `03_preview.sql` | **no** | Counts, and the exact list of who would be removed. **Read this before 04.** |
 | `04_remove_not_on_list.sql` | yes | Marks everyone not on the 101-name list as `left`. |
 | `05_assign_subunits.sql` | yes | Replaces each unit's membership with its sheet. |
+| `07_keep_subunit_people.sql` | yes | Puts back anyone a subunit sheet lists, and names who still has no account. |
 | `06_undo.sql` | on request | Puts a person, or everyone, back. |
+
+## The rule, as the department states it
+
+> Keep anyone who is on the official members list **OR** on any subunit sheet.
+> Remove only the people on **neither**.
+
+`04` judges on the members list alone, so it removes some current subunit
+members. `07` puts them back. Run `04`, then `07`, then `05`.
+
+`07` also lists the sheet names with no account at all. Create those from the
+app — **Admin → Members list**, pasting `combined-members-list.txt` — rather
+than by SQL, so the login is created properly through Supabase's own API.
+Then re-run `05_assign_subunits.sql`.
 
 ## What "removed" means
 

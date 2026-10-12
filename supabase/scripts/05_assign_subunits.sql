@@ -1,7 +1,7 @@
 -- ============================================================================
---  05_assign_subunits.sql  —  THIS CHANGES DATA.
+--  03_assign_subunits.sql  —  THIS CHANGES DATA.
 -- ============================================================================
---  Run 00_helpers.sql first, and 04_remove_not_on_list.sql before this so the
+--  Run 00_helpers.sql first, and 02_remove_not_on_list.sql before this so the
 --  sheets are matched against the people who are actually still members.
 --
 --  For each PRIMARY unit the membership is REPLACED by the sheet: everyone on
@@ -526,16 +526,33 @@ select 'Video Editing', s.full_name
 from im_sheet_video_editing s
 where not exists (select 1 from im_hit_video_editing h where h.listed_name = s.full_name);
 
--- Take out anyone currently secondary here who is not on the sheet.
+-- Take out anyone currently in this unit who is not on the sheet — primary
+-- rows included. This is a SECONDARY unit, so nobody should be primary in it,
+-- but the live data had people sitting there as primary, and only cleaning
+-- secondary rows left them behind. They are also the only people the unit's
+-- attendance list would show, since attendance is reported by primary unit.
 with gone as (
   delete from subunit_members sm
   using im_su_video_editing su
   where sm.subunit_id = su.id
-    and sm.membership_type = 'secondary'
     and sm.user_id not in (select user_id from im_resolved_video_editing)
   returning 1
 )
 insert into im_report select 'Video Editing', 'removed from unit', count(*) from gone;
+
+-- On the sheet, but recorded as primary in this secondary unit. Demote to
+-- secondary and report them: they now have no primary unit at all, so they
+-- need one before they appear on any attendance list.
+with demoted as (
+  update subunit_members sm
+  set membership_type = 'secondary'
+  from im_su_video_editing su
+  where sm.subunit_id = su.id
+    and sm.membership_type = 'primary'
+    and sm.user_id in (select user_id from im_resolved_video_editing)
+  returning 1
+)
+insert into im_report select 'Video Editing', 'demoted from primary (NEEDS A PRIMARY UNIT)', count(*) from demoted;
 
 -- Add as secondary, skipping anyone already at the four-subunit cap so the
 -- cap trigger cannot abort the whole transaction.
