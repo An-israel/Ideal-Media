@@ -44,7 +44,11 @@ insert into im_alias(sheet_name, official_name) values
   -- Confirmed: one person who changed number.
   ('Owan Flourish',            'Owan Flourish Worma'),
   -- Technical sheet drops the second 'a'.
-  ('omekodinma Victoria',      'Victoria Omekaodinma');
+  ('omekodinma Victoria',      'Victoria Omekaodinma'),
+  -- Confirmed by the department. The names share nothing, so only they could
+  -- tell us: the Technical sheet's "kelvin" is this person, and the number on
+  -- the sheet is his.
+  ('kelvin',                   'Chika Chukwuelokalum Benedict');
 
 -- ----------------------------------------------------------------------------
 --  Production  (primary) — 20 names on the sheet
@@ -73,13 +77,22 @@ insert into im_sheet_production(full_name, phone) values
     ('Prince', '08133811815');
 
 create temporary table im_su_production(id uuid) on commit drop;
+-- The slug first, then the name, then any name this unit used to go by, so a
+-- rename does not quietly turn this section into a no-op.
 insert into im_su_production
-select id from subunits where public.im_name_key(name) = public.im_name_key('Production');
+select id from subunits
+where slug = 'production'
+   or public.im_name_key(name) = any (array[public.im_name_key('Production')]);
 
 do $$
 begin
   if not exists (select 1 from im_su_production) then
     raise exception 'No subunit named "Production" exists. Create it under Admin -> Subunits first.';
+  end if;
+  -- Two matching rows would mean a duplicate subunit, and the statements below
+  -- read this as a single id. Stop rather than pick one.
+  if (select count(*) from im_su_production) > 1 then
+    raise exception 'More than one subunit matches "Production". Merge them under Admin -> Subunits first.';
   end if;
 end $$;
 
@@ -205,13 +218,22 @@ insert into im_sheet_photography(full_name, phone) values
     ('Kenechukwu', '2348050878887');
 
 create temporary table im_su_photography(id uuid) on commit drop;
+-- The slug first, then the name, then any name this unit used to go by, so a
+-- rename does not quietly turn this section into a no-op.
 insert into im_su_photography
-select id from subunits where public.im_name_key(name) = public.im_name_key('Photography');
+select id from subunits
+where slug = 'photography'
+   or public.im_name_key(name) = any (array[public.im_name_key('Photography')]);
 
 do $$
 begin
   if not exists (select 1 from im_su_photography) then
     raise exception 'No subunit named "Photography" exists. Create it under Admin -> Subunits first.';
+  end if;
+  -- Two matching rows would mean a duplicate subunit, and the statements below
+  -- read this as a single id. Stop rather than pick one.
+  if (select count(*) from im_su_photography) > 1 then
+    raise exception 'More than one subunit matches "Photography". Merge them under Admin -> Subunits first.';
   end if;
 end $$;
 
@@ -343,13 +365,22 @@ insert into im_sheet_projection(full_name, phone) values
     ('Aja-aki Chioma', null);
 
 create temporary table im_su_projection(id uuid) on commit drop;
+-- The slug first, then the name, then any name this unit used to go by, so a
+-- rename does not quietly turn this section into a no-op.
 insert into im_su_projection
-select id from subunits where public.im_name_key(name) = public.im_name_key('Projection');
+select id from subunits
+where slug = 'projection'
+   or public.im_name_key(name) = any (array[public.im_name_key('Projection')]);
 
 do $$
 begin
   if not exists (select 1 from im_su_projection) then
     raise exception 'No subunit named "Projection" exists. Create it under Admin -> Subunits first.';
+  end if;
+  -- Two matching rows would mean a duplicate subunit, and the statements below
+  -- read this as a single id. Stop rather than pick one.
+  if (select count(*) from im_su_projection) > 1 then
+    raise exception 'More than one subunit matches "Projection". Merge them under Admin -> Subunits first.';
   end if;
 end $$;
 
@@ -478,13 +509,22 @@ insert into im_sheet_video_editing(full_name, phone) values
     ('Agu Chibueze', null);
 
 create temporary table im_su_video_editing(id uuid) on commit drop;
+-- The slug first, then the name, then any name this unit used to go by, so a
+-- rename does not quietly turn this section into a no-op.
 insert into im_su_video_editing
-select id from subunits where public.im_name_key(name) = public.im_name_key('Video Editing');
+select id from subunits
+where slug = 'video-editing'
+   or public.im_name_key(name) = any (array[public.im_name_key('Video Editing')]);
 
 do $$
 begin
   if not exists (select 1 from im_su_video_editing) then
     raise exception 'No subunit named "Video Editing" exists. Create it under Admin -> Subunits first.';
+  end if;
+  -- Two matching rows would mean a duplicate subunit, and the statements below
+  -- read this as a single id. Stop rather than pick one.
+  if (select count(*) from im_su_video_editing) > 1 then
+    raise exception 'More than one subunit matches "Video Editing". Merge them under Admin -> Subunits first.';
   end if;
 end $$;
 
@@ -585,7 +625,7 @@ with ins as (
 insert into im_report select 'Video Editing', 'added as secondary', count(*) from ins;
 
 -- ----------------------------------------------------------------------------
---  Social Media  (primary) — 20 names on the sheet
+--  Social Media  (primary) — 19 names on the sheet
 -- ----------------------------------------------------------------------------
 create temporary table im_sheet_social_media(full_name text, phone text) on commit drop;
 insert into im_sheet_social_media(full_name, phone) values
@@ -600,7 +640,6 @@ insert into im_sheet_social_media(full_name, phone) values
     ('Onwukeme zara', '08146450684'),
     ('Metu Amarachim', '08060283236'),
     ('Agu Vitalis Chukwuemerie', '07016639391'),
-    ('Nwachukwu Chibueze', null),
     ('Eze Chidiebube Ihuoma', null),
     ('Abanokwu Bethel Chielotam', null),
     ('Ugochukwu Christopher', null),
@@ -611,13 +650,22 @@ insert into im_sheet_social_media(full_name, phone) values
     ('Cynthia', null);
 
 create temporary table im_su_social_media(id uuid) on commit drop;
+-- The slug first, then the name, then any name this unit used to go by, so a
+-- rename does not quietly turn this section into a no-op.
 insert into im_su_social_media
-select id from subunits where public.im_name_key(name) = public.im_name_key('Social Media');
+select id from subunits
+where slug = 'social-media'
+   or public.im_name_key(name) = any (array[public.im_name_key('Social Media')]);
 
 do $$
 begin
   if not exists (select 1 from im_su_social_media) then
     raise exception 'No subunit named "Social Media" exists. Create it under Admin -> Subunits first.';
+  end if;
+  -- Two matching rows would mean a duplicate subunit, and the statements below
+  -- read this as a single id. Stop rather than pick one.
+  if (select count(*) from im_su_social_media) > 1 then
+    raise exception 'More than one subunit matches "Social Media". Merge them under Admin -> Subunits first.';
   end if;
 end $$;
 
@@ -716,10 +764,10 @@ with ins as (
 insert into im_report select 'Social Media', 'added as primary', count(*) from ins;
 
 -- ----------------------------------------------------------------------------
---  Utility (Videography & Technical)  (primary) — 29 names on the sheet
+--  Technical  (primary) — 29 names on the sheet
 -- ----------------------------------------------------------------------------
-create temporary table im_sheet_utility_videography_technical(full_name text, phone text) on commit drop;
-insert into im_sheet_utility_videography_technical(full_name, phone) values
+create temporary table im_sheet_technical(full_name text, phone text) on commit drop;
+insert into im_sheet_technical(full_name, phone) values
     ('divine oluwa', '08084477742'),
     ('Aniobi smiles', '08152878749'),
     ('Chibueze nwachukwu', '08146359618'),
@@ -739,10 +787,10 @@ insert into im_sheet_utility_videography_technical(full_name, phone) values
     ('victor igattah', '09130254153'),
     ('omekodinma Victoria', '08168818299'),
     ('Benedicta Onyema', '09117365805'),
-    ('gift Eze', null),
+    ('gift Eze', '070676502264'),
     ('Goodness chukwuajah', '07041752149'),
     ('Joshua chibuenyim', '09068068385'),
-    ('kelvin', null),
+    ('kelvin', '07088980666'),
     ('Michelle', '09049291694'),
     ('Favour', '07019199742'),
     ('Chiwendu', '09167975892'),
@@ -750,30 +798,39 @@ insert into im_sheet_utility_videography_technical(full_name, phone) values
     ('miracle', '07040035664'),
     ('Onyinye', null);
 
-create temporary table im_su_utility_videography_technical(id uuid) on commit drop;
-insert into im_su_utility_videography_technical
-select id from subunits where public.im_name_key(name) = public.im_name_key('Utility (Videography & Technical)');
+create temporary table im_su_technical(id uuid) on commit drop;
+-- The slug first, then the name, then any name this unit used to go by, so a
+-- rename does not quietly turn this section into a no-op.
+insert into im_su_technical
+select id from subunits
+where slug = 'technical'
+   or public.im_name_key(name) = any (array[public.im_name_key('Technical'), public.im_name_key('Utility (Videography & Technical)'), public.im_name_key('Utility (Technical in Media)'), public.im_name_key('Utility'), public.im_name_key('Technical (Utility)')]);
 
 do $$
 begin
-  if not exists (select 1 from im_su_utility_videography_technical) then
-    raise exception 'No subunit named "Utility (Videography & Technical)" exists. Create it under Admin -> Subunits first.';
+  if not exists (select 1 from im_su_technical) then
+    raise exception 'No subunit named "Technical" exists. Create it under Admin -> Subunits first.';
+  end if;
+  -- Two matching rows would mean a duplicate subunit, and the statements below
+  -- read this as a single id. Stop rather than pick one.
+  if (select count(*) from im_su_technical) > 1 then
+    raise exception 'More than one subunit matches "Technical". Merge them under Admin -> Subunits first.';
   end if;
 end $$;
 
 -- Resolve each sheet line to one account. An account can only be claimed once.
-create temporary table im_hit_utility_videography_technical(listed_name text, user_id uuid) on commit drop;
+create temporary table im_hit_technical(listed_name text, user_id uuid) on commit drop;
 -- Tier 0: a hand-checked spelling difference.
-insert into im_hit_utility_videography_technical(listed_name, user_id)
+insert into im_hit_technical(listed_name, user_id)
 select distinct s.full_name, p.id
-from im_sheet_utility_videography_technical s
+from im_sheet_technical s
 join im_alias a on public.im_name_key(a.sheet_name) = public.im_name_key(s.full_name)
 join profiles p on public.im_name_key(p.full_name) = public.im_name_key(a.official_name)
 where p.member_status <> 'left';
 
-insert into im_hit_utility_videography_technical(listed_name, user_id)
+insert into im_hit_technical(listed_name, user_id)
 select distinct s.full_name, p.id
-from im_sheet_utility_videography_technical s
+from im_sheet_technical s
 join profiles p
   on (public.im_phone_key(s.phone) is not null
       and public.im_phone_key(s.phone) in (public.im_phone_key(p.phone),
@@ -786,13 +843,13 @@ where p.member_status <> 'left';
 -- "Majesty Gift Chijindu"), and ONLY when exactly one account fits. A
 -- shortened name that could be two people stays unmatched on purpose — that
 -- is how "Agbo Amarachi Grace" is kept apart from "Agbo Amarachi Emmanuella".
-insert into im_hit_utility_videography_technical(listed_name, user_id)
+insert into im_hit_technical(listed_name, user_id)
 select t.full_name, t.only_id
 from (
   select s.full_name,
          min(p.id::text)::uuid as only_id,
          count(distinct p.id)  as fits
-  from im_sheet_utility_videography_technical s
+  from im_sheet_technical s
   join profiles p
     on array_length(public.im_name_arr(s.full_name), 1) >= 2
    -- Both sides need two names. A one-word account ("Chiamaka") is contained
@@ -802,58 +859,58 @@ from (
    and (public.im_name_arr(s.full_name) <@ public.im_name_arr(p.full_name)
         or public.im_name_arr(p.full_name) <@ public.im_name_arr(s.full_name))
   where p.member_status <> 'left'
-    and not exists (select 1 from im_hit_utility_videography_technical h where h.listed_name = s.full_name)
-    and p.id not in (select user_id from im_hit_utility_videography_technical)
+    and not exists (select 1 from im_hit_technical h where h.listed_name = s.full_name)
+    and p.id not in (select user_id from im_hit_technical)
   group by s.full_name
 ) t
 where t.fits = 1;
 
-create temporary table im_resolved_utility_videography_technical(user_id uuid primary key) on commit drop;
-insert into im_resolved_utility_videography_technical
-select user_id from im_hit_utility_videography_technical group by user_id;
+create temporary table im_resolved_technical(user_id uuid primary key) on commit drop;
+insert into im_resolved_technical
+select user_id from im_hit_technical group by user_id;
 
 insert into im_unmatched(unit, listed_name)
-select 'Utility (Videography & Technical)', s.full_name
-from im_sheet_utility_videography_technical s
-where not exists (select 1 from im_hit_utility_videography_technical h where h.listed_name = s.full_name);
+select 'Technical', s.full_name
+from im_sheet_technical s
+where not exists (select 1 from im_hit_technical h where h.listed_name = s.full_name);
 
 -- Take out anyone currently primary here who is not on the sheet.
 with gone as (
   delete from subunit_members sm
-  using im_su_utility_videography_technical su
+  using im_su_technical su
   where sm.subunit_id = su.id
     and sm.membership_type = 'primary'
-    and sm.user_id not in (select user_id from im_resolved_utility_videography_technical)
+    and sm.user_id not in (select user_id from im_resolved_technical)
   returning 1
 )
-insert into im_report select 'Utility (Videography & Technical)', 'removed from unit', count(*) from gone;
+insert into im_report select 'Technical', 'removed from unit', count(*) from gone;
 
 -- A person has exactly one primary unit, so clear any primary elsewhere.
 delete from subunit_members sm
 where sm.membership_type = 'primary'
-  and sm.user_id in (select user_id from im_resolved_utility_videography_technical)
-  and sm.subunit_id <> (select id from im_su_utility_videography_technical);
+  and sm.user_id in (select user_id from im_resolved_technical)
+  and sm.subunit_id <> (select id from im_su_technical);
 
 -- Already in this unit as a secondary member: promote rather than duplicate.
 with up as (
   update subunit_members sm
   set membership_type = 'primary'
-  from im_su_utility_videography_technical su
+  from im_su_technical su
   where sm.subunit_id = su.id
-    and sm.user_id in (select user_id from im_resolved_utility_videography_technical)
+    and sm.user_id in (select user_id from im_resolved_technical)
     and sm.membership_type <> 'primary'
   returning 1
 )
-insert into im_report select 'Utility (Videography & Technical)', 'promoted to primary', count(*) from up;
+insert into im_report select 'Technical', 'promoted to primary', count(*) from up;
 
 with ins as (
   insert into subunit_members (user_id, subunit_id, membership_type)
   select r.user_id, su.id, 'primary'
-  from im_resolved_utility_videography_technical r, im_su_utility_videography_technical su
+  from im_resolved_technical r, im_su_technical su
   on conflict (subunit_id, user_id) do nothing
   returning 1
 )
-insert into im_report select 'Utility (Videography & Technical)', 'added as primary', count(*) from ins;
+insert into im_report select 'Technical', 'added as primary', count(*) from ins;
 
 -- ============================================================================
 --  RESULTS

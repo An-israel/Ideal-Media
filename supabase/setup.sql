@@ -518,7 +518,7 @@ insert into subunits (name, slug, category) values
   ('Projection', 'projection', 'primary'),
   ('Production', 'production', 'primary'),
   ('Social Media', 'social-media', 'primary'),
-  ('Utility (Videography & Technical)', 'utility', 'primary'),
+  ('Technical', 'technical', 'primary'),
   ('Graphic Design', 'graphic-design', 'secondary'),
   ('Video Editing', 'video-editing', 'secondary'),
   ('Welfare', 'welfare', 'secondary'),

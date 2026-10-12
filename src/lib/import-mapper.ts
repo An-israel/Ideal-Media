@@ -193,8 +193,8 @@ const SUBUNIT_MAP_TOOL: Anthropic.Tool = {
 
 /**
  * Maps the messy subunit/unit values found in a sheet to our existing subunit
- * names (e.g. "Utility (Technical in Media)" → "Utility (Videography &
- * Technical)"). Returns a lowercase-value → existing-name map.
+ * names (e.g. "Utility (Technical in Media)" → "Technical"). Returns a
+ * lowercase-value → existing-name map.
  *
  * Returns {} when the model doesn't answer with the tool, but THROWS on an API
  * failure — callers catch and fall back to heuristic matching.

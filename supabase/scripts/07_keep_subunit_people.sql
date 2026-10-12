@@ -33,7 +33,8 @@ insert into im_alias(sheet_name, official_name) values
   ('Agbo Amarachi Grace',      'Agbo Amarachi Emmanuella'),
   ('Agbo Grace A',             'Agbo Amarachi Emmanuella'),
   ('Owan Flourish',            'Owan Flourish Worma'),
-  ('omekodinma Victoria',      'Victoria Omekaodinma');
+  ('omekodinma Victoria',      'Victoria Omekaodinma'),
+  ('kelvin',                   'Chika Chukwuelokalum Benedict');
 
 create temporary table im_sheet_all(full_name text, phone text) on commit drop;
 insert into im_sheet_all(full_name, phone) values
@@ -147,9 +148,9 @@ insert into im_sheet_all(full_name, phone) values
     ('Vera Chiamaka', null),
     ('Destiny', null),
     ('Cynthia', null),
-    -- Technical (Utility). Two numbers are left out on purpose: kelvin's
-    -- 07088980666 is Chika Chukwuelokalum Benedict's on the members list, and
-    -- gift Eze's 070676502264 has twelve digits.
+    -- Technical. Both unusual numbers were explained by the department:
+    -- kelvin IS Chika Chukwuelokalum Benedict (see the pair above), and
+    -- gift Eze's number is Cameroonian, not a malformed Nigerian one.
     ('divine oluwa', '08084477742'),
     ('Aniobi smiles', '08152878749'),
     ('Chibueze nwachukwu', '08146359618'),
@@ -169,10 +170,10 @@ insert into im_sheet_all(full_name, phone) values
     ('victor igattah', '09130254153'),
     ('omekodinma Victoria', '08168818299'),
     ('Benedicta Onyema', '09117365805'),
-    ('gift Eze', null),
+    ('gift Eze', '070676502264'),
     ('Goodness chukwuajah', '07041752149'),
     ('Joshua chibuenyim', '09068068385'),
-    ('kelvin', null),
+    ('kelvin', '07088980666'),
     ('Michelle', '09049291694'),
     ('Favour', '07019199742'),
     ('Chiwendu', '09167975892'),

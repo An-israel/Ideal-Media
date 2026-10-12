@@ -67,7 +67,7 @@ function matchSubunit(
     const n = s.name.toLowerCase();
     if (v.includes(n) || n.includes(v)) return s.id;
   }
-  // First significant word (e.g. "Utility (Technical in Media)" → "Utility …").
+  // First significant word (e.g. "Technical (Utility)" → "Technical …").
   const ft = firstToken(v);
   if (ft.length > 2) {
     for (const s of subunits) if (firstToken(s.name) === ft) return s.id;
@@ -168,7 +168,7 @@ export async function importMembers(formData: FormData): Promise<ImportResult> {
     ];
 
     // AI-map the distinct subunit values in the sheet to our existing subunits,
-    // so messy names ("Utility (Technical in Media)") still match.
+    // so messy names ("Utility (Technical in Media)") still match "Technical".
     const distinctSubunitValues = new Set<string>();
     for (const r of rows) {
       const pv = pick(toLookup(r), colMap?.primary_subunit, SUBUNIT_HEADERS);

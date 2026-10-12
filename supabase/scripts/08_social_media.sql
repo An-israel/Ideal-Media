@@ -4,7 +4,7 @@
 --  Run 00_helpers.sql first. Nothing else is needed: this script is complete
 --  on its own and safe to run more than once.
 --
---  It does two things for the 20 names on the Social Media sheet:
+--  It does two things for the 19 names on the Social Media sheet:
 --
 --    1. Puts back anyone who was marked 'left' by 04_remove_not_on_list.sql.
 --       They are current members of a subunit, so they stay — the same rule
@@ -48,7 +48,6 @@ insert into im_solo_sheet(full_name, phone) values
     ('Onwukeme zara', '08146450684'),
     ('Metu Amarachim', '08060283236'),
     ('Agu Vitalis Chukwuemerie', '07016639391'),
-    ('Nwachukwu Chibueze', null),
     ('Eze Chidiebube Ihuoma', null),
     ('Abanokwu Bethel Chielotam', null),
     ('Ugochukwu Christopher', null),
@@ -127,7 +126,7 @@ join subunits s on s.id = sm.subunit_id
 where public.im_name_key(s.name) <> public.im_name_key('Social Media');
 
 -- ----------------------------------------------------------------------------
---  Social Media  (primary) — 20 names on the sheet
+--  Social Media  (primary) — 19 names on the sheet
 -- ----------------------------------------------------------------------------
 create temporary table im_sheet_social_media(full_name text, phone text) on commit drop;
 insert into im_sheet_social_media(full_name, phone) values
@@ -142,7 +141,6 @@ insert into im_sheet_social_media(full_name, phone) values
     ('Onwukeme zara', '08146450684'),
     ('Metu Amarachim', '08060283236'),
     ('Agu Vitalis Chukwuemerie', '07016639391'),
-    ('Nwachukwu Chibueze', null),
     ('Eze Chidiebube Ihuoma', null),
     ('Abanokwu Bethel Chielotam', null),
     ('Ugochukwu Christopher', null),
@@ -153,13 +151,22 @@ insert into im_sheet_social_media(full_name, phone) values
     ('Cynthia', null);
 
 create temporary table im_su_social_media(id uuid) on commit drop;
+-- The slug first, then the name, then any name this unit used to go by, so a
+-- rename does not quietly turn this section into a no-op.
 insert into im_su_social_media
-select id from subunits where public.im_name_key(name) = public.im_name_key('Social Media');
+select id from subunits
+where slug = 'social-media'
+   or public.im_name_key(name) = any (array[public.im_name_key('Social Media')]);
 
 do $$
 begin
   if not exists (select 1 from im_su_social_media) then
     raise exception 'No subunit named "Social Media" exists. Create it under Admin -> Subunits first.';
+  end if;
+  -- Two matching rows would mean a duplicate subunit, and the statements below
+  -- read this as a single id. Stop rather than pick one.
+  if (select count(*) from im_su_social_media) > 1 then
+    raise exception 'More than one subunit matches "Social Media". Merge them under Admin -> Subunits first.';
   end if;
 end $$;
 
