@@ -1,5 +1,5 @@
 -- ============================================================================
---  04_undo.sql  —  put somebody back.
+--  06_undo.sql  —  put somebody back.
 -- ============================================================================
 --  Nothing the other scripts do is destructive: removal only marks a person
 --  'left' (and blocks sign-in if 0015 has been run). No row is deleted, so

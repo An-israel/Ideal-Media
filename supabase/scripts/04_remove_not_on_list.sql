@@ -1,12 +1,12 @@
 -- ============================================================================
---  02_remove_not_on_list.sql  —  THIS CHANGES DATA.
+--  04_remove_not_on_list.sql  —  THIS CHANGES DATA.
 -- ============================================================================
---  Run 00_helpers.sql first, and read 01_preview.sql output before this.
+--  Run 00_helpers.sql first, and read 03_preview.sql output before this.
 --
 --  Everyone NOT on the official list is marked 'left', which takes them off
 --  every roster, every attendance list and every future report immediately.
 --  Nothing is deleted, so past reports still read correctly and this can be
---  undone (see 04_undo.sql).
+--  undone (see 06_undo.sql).
 --
 --  Accounts holding a role (secretary, welfare, leader, admin) are left alone
 --  by this script on purpose — removing your own staff by accident is worse

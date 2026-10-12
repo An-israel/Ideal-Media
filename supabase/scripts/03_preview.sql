@@ -1,5 +1,5 @@
 -- ============================================================================
---  01_preview.sql  —  CHANGES NOTHING. Read the numbers before you act.
+--  03_preview.sql  —  CHANGES NOTHING. Read the numbers before you act.
 -- ============================================================================
 --  Run 00_helpers.sql first.
 --

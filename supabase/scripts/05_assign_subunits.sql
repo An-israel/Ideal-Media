@@ -1,7 +1,7 @@
 -- ============================================================================
---  03_assign_subunits.sql  —  THIS CHANGES DATA.
+--  05_assign_subunits.sql  —  THIS CHANGES DATA.
 -- ============================================================================
---  Run 00_helpers.sql first, and 02_remove_not_on_list.sql before this so the
+--  Run 00_helpers.sql first, and 04_remove_not_on_list.sql before this so the
 --  sheets are matched against the people who are actually still members.
 --
 --  For each PRIMARY unit the membership is REPLACED by the sheet: everyone on
@@ -35,7 +35,14 @@ insert into im_alias(sheet_name, official_name) values
   ('Ezeora Angel Oluomachi',   'Ezeora Evangel Oluomachi'),
   ('Ikeme Ebube',              'Ikeme Ebubechukwu Daniel'),      -- Ebube / Ebubechukwu
   ('Philip Kamsi',             'Nwokolo Kamsiyochukwu Philip'),  -- Kamsi / Kamsiyochukwu
-  ('Favour Mmesoma',           'Chinanu Favour Nmesoma');        -- Mmesoma / Nmesoma
+  ('Favour Mmesoma',           'Chinanu Favour Nmesoma'),        -- Mmesoma / Nmesoma
+  -- Confirmed by the department: one person, not two sisters. The middle name
+  -- and the phone number both differ between the lists, which is why this
+  -- could not be worked out from the data alone.
+  ('Agbo Amarachi Grace',      'Agbo Amarachi Emmanuella'),      -- Grace / Emmanuella
+  ('Agbo Grace A',             'Agbo Amarachi Emmanuella'),
+  -- Confirmed: one person who changed number.
+  ('Owan Flourish',            'Owan Flourish Worma');
 
 -- ----------------------------------------------------------------------------
 --  Production  (primary) — 20 names on the sheet
