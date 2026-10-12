@@ -7,6 +7,7 @@ export interface SessionRoles {
   roles: Role[];
   ledSubunitIds: string[];
   cocCompleted: boolean;
+  accessRevoked: boolean;
 }
 
 /**
@@ -28,7 +29,11 @@ export async function getSessionRoles(): Promise<SessionRoles | null> {
       .select("subunit_id")
       .eq("user_id", user.id)
       .eq("role_in_subunit", "leader"),
-    supabase.from("profiles").select("coc_completed").eq("id", user.id).single(),
+    supabase
+      .from("profiles")
+      .select("coc_completed, access_revoked_at")
+      .eq("id", user.id)
+      .single(),
   ]);
 
   return {
@@ -36,5 +41,8 @@ export async function getSessionRoles(): Promise<SessionRoles | null> {
     roles: (roleRows ?? []).map((r) => r.role as Role),
     ledSubunitIds: (ledRows ?? []).map((r) => r.subunit_id),
     cocCompleted: profile?.coc_completed ?? false,
+    // Set once the member is no longer part of the unit. Checked by the app
+    // layout, so a session issued before revocation stops working.
+    accessRevoked: profile?.access_revoked_at != null,
   };
 }

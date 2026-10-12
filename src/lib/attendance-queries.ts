@@ -72,10 +72,15 @@ export async function getSubunitRoster(subunitIds: string[]): Promise<RosterPers
   if (userIds.length === 0) return [];
 
   const [profiles, { data: subunitRows }] = await Promise.all([
-    fetchAllRows<{ id: string; full_name: string; member_status: string }>((from, to) =>
+    fetchAllRows<{
+      id: string;
+      full_name: string;
+      member_status: string;
+      access_revoked_at: string | null;
+    }>((from, to) =>
       admin
         .from("profiles")
-        .select("id, full_name, member_status")
+        .select("id, full_name, member_status, access_revoked_at")
         .in("id", userIds)
         .range(from, to)
     ),
@@ -84,7 +89,7 @@ export async function getSubunitRoster(subunitIds: string[]): Promise<RosterPers
   const subunitName = new Map((subunitRows ?? []).map((s) => [s.id, s.name]));
 
   return profiles
-    .filter((p) => !["graduated", "left"].includes(p.member_status))
+    .filter((p) => !["graduated", "left"].includes(p.member_status) && p.access_revoked_at === null)
     .map((p) => {
       const subunitId = reporting.get(p.id)!;
       return {
@@ -106,8 +111,13 @@ export async function getSubunitRoster(subunitIds: string[]): Promise<RosterPers
 export async function getUnassignedMembers(): Promise<{ userId: string; fullName: string }[]> {
   const admin = createAdminClient();
   const [profiles, memberships] = await Promise.all([
-    fetchAllRows<{ id: string; full_name: string; member_status: string }>((from, to) =>
-      admin.from("profiles").select("id, full_name, member_status").range(from, to)
+    fetchAllRows<{
+      id: string;
+      full_name: string;
+      member_status: string;
+      access_revoked_at: string | null;
+    }>((from, to) =>
+      admin.from("profiles").select("id, full_name, member_status, access_revoked_at").range(from, to)
     ),
     fetchAllRows<{
       user_id: string;
@@ -132,7 +142,7 @@ export async function getUnassignedMembers(): Promise<{ userId: string; fullName
   );
 
   return profiles
-    .filter((p) => !["graduated", "left"].includes(p.member_status))
+    .filter((p) => !["graduated", "left"].includes(p.member_status) && p.access_revoked_at === null)
     .filter((p) => !reporting.has(p.id))
     .map((p) => ({ userId: p.id, fullName: p.full_name }))
     .sort((a, b) => a.fullName.localeCompare(b.fullName));
@@ -255,6 +265,32 @@ export async function getReportData(activityId: string, serviceDate: string) {
       absenceNote: rec?.absenceNote ?? null,
     };
   });
+
+  // Anyone who has a record for this service but is no longer on the roll —
+  // they have since left the unit and had their access revoked.
+  //
+  // Without this, revoking two members would retroactively turn a report that
+  // read "Total Members: 101" into 99 and drop those names out of their
+  // categories, changing numbers that had already been sent to the Pastors. A
+  // report for a past service has to show who was on the roll THEN.
+  const onRoll = new Set(roster.map((p) => p.userId));
+  const departedIds = [...records.keys()].filter((id) => !onRoll.has(id));
+  if (departedIds.length > 0) {
+    const departed = await fetchAllRows<{ id: string; full_name: string }>((from, to) =>
+      admin.from("profiles").select("id, full_name").in("id", departedIds).range(from, to)
+    );
+    for (const d of departed) {
+      const rec = records.get(d.id)!;
+      people.push({
+        userId: d.id,
+        fullName: d.full_name,
+        subunitName: null,
+        status: rec.status,
+        absenceReason: rec.absenceReason,
+        absenceNote: rec.absenceNote,
+      });
+    }
+  }
 
   const bySubunit = new Map<string, RosterPerson[]>();
   for (const p of roster) {

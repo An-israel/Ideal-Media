@@ -6,6 +6,9 @@ import { AppShell } from "@/components/app/app-shell";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSessionRoles();
   if (!session) redirect("/login");
+  // Revoked before the Code of Conduct check: somebody no longer in the unit
+  // should not be walked through a quiz on their way out.
+  if (session.accessRevoked) redirect("/access-removed");
   if (!session.cocCompleted) redirect("/coc");
 
   const supabase = await createClient();

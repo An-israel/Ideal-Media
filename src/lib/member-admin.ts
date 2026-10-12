@@ -9,7 +9,12 @@ export interface NewMemberRecord {
   email: string;
   phone: string;
   whatsappNumber: string;
-  primarySubunitId: string;
+  /**
+   * Optional. The roster-sync pass creates members before subunits are
+   * assigned, and such a person surfaces in getUnassignedMembers() rather than
+   * being silently invisible.
+   */
+  primarySubunitId?: string;
   /** How they entered the system. Preserved after they claim the account. */
   origin: "welfare" | "secretary" | "import";
   birthMonth?: number | null;
@@ -83,7 +88,6 @@ export async function createUnclaimedMember(
 
   const fullName = input.fullName.trim();
   if (!fullName) throw new Error("Name is required.");
-  if (!input.primarySubunitId) throw new Error("Please choose a primary subunit.");
 
   const existing = await findExistingMember(input);
   if (existing) {
@@ -140,12 +144,14 @@ export async function createUnclaimedMember(
     .insert({ user_id: userId, role: "member" });
   if (roleErr) return rollback(roleErr.message);
 
-  const { error: membershipErr } = await admin.from("subunit_members").insert({
-    user_id: userId,
-    subunit_id: input.primarySubunitId,
-    membership_type: "primary",
-  });
-  if (membershipErr) return rollback(membershipErr.message);
+  if (input.primarySubunitId) {
+    const { error: membershipErr } = await admin.from("subunit_members").insert({
+      user_id: userId,
+      subunit_id: input.primarySubunitId,
+      membership_type: "primary",
+    });
+    if (membershipErr) return rollback(membershipErr.message);
+  }
 
   return { userId };
 }

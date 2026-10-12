@@ -67,6 +67,10 @@ export type Profile = {
   avatar_url: string | null;
   member_status: MemberStatus;
   coc_completed: boolean;
+  /** Set when the member is no longer part of the unit; history is kept. */
+  access_revoked_at: string | null;
+  access_revoked_by: string | null;
+  access_revoked_reason: string | null;
   coc_completed_at: string | null;
   claimed: boolean;
   /** How they joined: self_signup | import | welfare */
@@ -444,6 +448,10 @@ export type Database = {
       attendance_roll_total: {
         Args: Record<string, never>;
         Returns: number;
+      };
+      access_active: {
+        Args: Record<string, never>;
+        Returns: boolean;
       };
       course_instructors: {
         Args: Record<string, never>;

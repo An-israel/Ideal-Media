@@ -130,6 +130,13 @@ export async function addMemberToRoster(input: {
   try {
     await requireSecretary();
 
+    // createUnclaimedMember allows no subunit (roster-sync creates members
+    // before subunits are assigned), but adding someone by hand always has
+    // one, and a member with none is invisible on every attendance list.
+    if (!input.primarySubunitId) {
+      return { ok: false, error: "Please choose a primary subunit." };
+    }
+
     await createUnclaimedMember({
       fullName: input.fullName,
       email: input.email,

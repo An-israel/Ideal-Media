@@ -114,6 +114,13 @@ export async function addNewMember(input: NewMemberInput): Promise<AddMemberResu
     // step fails, so a failure can't leave an orphaned login (AUDIT ROS-2).
     // It also runs the duplicate check on normalised phone digits, so
     // "08031234567" and "+2348031234567" are recognised as the same person.
+    // createUnclaimedMember allows no subunit (roster-sync creates members
+    // before subunits are assigned), but adding someone by hand always has
+    // one, and a member with none is invisible on every attendance list.
+    if (!input.primarySubunitId) {
+      return { ok: false, error: "Please choose a primary subunit." };
+    }
+
     const { userId } = await createUnclaimedMember({
       fullName: input.fullName,
       email: input.email,
