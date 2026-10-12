@@ -15,6 +15,7 @@ click **Run**, in this order. Scripts 1 and 4 change nothing on their own.
 | `05_assign_subunits.sql` | yes | Replaces each unit's membership with its sheet. |
 | `07_keep_subunit_people.sql` | yes | Puts back anyone a subunit sheet lists, and names who still has no account. |
 | `08_social_media.sql` | yes | Social Media on its own: puts its people back and makes them primary members. Complete in itself; run it after `00`. |
+| `09_technical_unit.sql` | yes | The same, for Technical (Utility). Run it after `08`. |
 | `06_undo.sql` | on request | Puts a person, or everyone, back. |
 
 ## The rule, as the department states it
@@ -30,22 +31,45 @@ app — **Admin → Members list**, pasting `combined-members-list.txt` — rath
 than by SQL, so the login is created properly through Supabase's own API.
 Then re-run `05_assign_subunits.sql`.
 
-## Social Media arrived later
+## Social Media and Technical arrived later
 
-`08_social_media.sql` is the whole Social Media sheet on its own, because `05`
-and `07` had already been run against the live site by the time it came in. It
-needs only `00_helpers.sql` before it, does both jobs for those 20 names (puts
-back anyone `04` had removed, then makes them primary members of Social Media),
-and is safe to run twice. `05` and `07` now carry the same names too, so a run
-from scratch gives the same result either way.
+`08_social_media.sql` and `09_technical_unit.sql` are those two sheets on their
+own, because `05` and `07` had already been run against the live site by the
+time they came in. Each needs only `00_helpers.sql` before it, does both jobs
+for its names (puts back anyone `04` had removed, then makes them primary
+members of the unit), and is safe to run twice. `05` and `07` now carry the
+same names too, so a run from scratch gives the same result either way.
+
+**Run `09` after `08`.** One person — **Nwachukwu Chibueze** — is on *both*
+sheets, and a person has exactly one primary unit, so whichever script runs
+last wins. `09` running second puts him in Technical and says so under
+`moved_here / taken_out_of`. The department has to decide which unit counts
+him.
 
 **James Chiamaka is deliberately left out.** The sheet marks him withdrawn —
 "has another church" — so he is neither put back nor added to the unit.
 
-Four names on that sheet have no surname and no number: **Ugochi**, **Vera
-Chiamaka**, **Destiny**, **Cynthia**. `08` matches the first two if an account
-already uses that exact name; the rest are reported as `matched_nobody` rather
-than guessed at.
+Four names on the Social Media sheet have no surname and no number: **Ugochi**,
+**Vera Chiamaka**, **Destiny**, **Cynthia**. `08` matches the first two if an
+account already uses that exact name; the rest are reported as
+`matched_nobody` rather than guessed at.
+
+Two numbers on the Technical sheet are deliberately **not** used:
+
+- **kelvin — 07088980666.** That number is Chika Chukwuelokalum Benedict's on
+  the members list. Either kelvin is that person under another name, or the
+  number is a typo; nothing in the data settles it, so matching on the phone
+  would have quietly assigned the wrong account.
+- **gift Eze — 070676502264.** Twelve digits, so not a Nigerian number.
+
+And one Technical match is worth confirming: **Chiwendu — 09167975892** is
+Chinedu Chidumebi's number exactly, and the names are one letter apart, so it
+is treated as the same person.
+
+Eight Technical names end up as `matched_nobody`: divine oluwa, gift Eze,
+kelvin, Michelle, Favour, Daniel, miracle, Onyinye. The Technical sheet does
+supply a number for **Divine Oluwa** (08084477742), who appears on the Video
+Editing sheet without one — `combined-members-list.txt` now carries it.
 
 ## Why Video Editing shows 0 on the attendance page — and why that is right
 
@@ -107,6 +131,7 @@ Checked by hand; both spellings appear in `03` so you can verify them:
 | Favour **M**mesoma | Chinanu Favour **N**mesoma |
 | Agbo Amarachi **Grace** / Agbo Grace A | Agbo Amarachi **Emmanuella** |
 | Owan Flourish | Owan Flourish **Worma** |
+| omek**o**dinma Victoria | Victoria Omek**ao**dinma |
 
 The last two were confirmed by the department rather than worked out from the
 data: in both cases the middle name *and* the phone number differ between the

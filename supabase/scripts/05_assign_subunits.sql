@@ -42,7 +42,9 @@ insert into im_alias(sheet_name, official_name) values
   ('Agbo Amarachi Grace',      'Agbo Amarachi Emmanuella'),      -- Grace / Emmanuella
   ('Agbo Grace A',             'Agbo Amarachi Emmanuella'),
   -- Confirmed: one person who changed number.
-  ('Owan Flourish',            'Owan Flourish Worma');
+  ('Owan Flourish',            'Owan Flourish Worma'),
+  -- Technical sheet drops the second 'a'.
+  ('omekodinma Victoria',      'Victoria Omekaodinma');
 
 -- ----------------------------------------------------------------------------
 --  Production  (primary) — 20 names on the sheet
@@ -712,6 +714,146 @@ with ins as (
   returning 1
 )
 insert into im_report select 'Social Media', 'added as primary', count(*) from ins;
+
+-- ----------------------------------------------------------------------------
+--  Utility (Videography & Technical)  (primary) — 29 names on the sheet
+-- ----------------------------------------------------------------------------
+create temporary table im_sheet_utility_videography_technical(full_name text, phone text) on commit drop;
+insert into im_sheet_utility_videography_technical(full_name, phone) values
+    ('divine oluwa', '08084477742'),
+    ('Aniobi smiles', '08152878749'),
+    ('Chibueze nwachukwu', '08146359618'),
+    ('Chidibere success', '09119229230'),
+    ('Ezenwa Emmanuel', '08023813695'),
+    ('Ifeoma Nnam', '08086478211'),
+    ('David Milagro', '09060694909'),
+    ('Nathaniel Peter', '07087135592'),
+    ('okereke goodness', '08117828223'),
+    ('Oluchi Eze', '09031277384'),
+    ('Pamela Orji', '07061669987'),
+    ('precious Okechukwu', '07047146684'),
+    ('Somto okafor', '09015589563'),
+    ('Rhema ubakibie', '08166364341'),
+    ('Samuel nwaigwe', '07044205365'),
+    ('Sunday divine', '08112175408'),
+    ('victor igattah', '09130254153'),
+    ('omekodinma Victoria', '08168818299'),
+    ('Benedicta Onyema', '09117365805'),
+    ('gift Eze', null),
+    ('Goodness chukwuajah', '07041752149'),
+    ('Joshua chibuenyim', '09068068385'),
+    ('kelvin', null),
+    ('Michelle', '09049291694'),
+    ('Favour', '07019199742'),
+    ('Chiwendu', '09167975892'),
+    ('Daniel', '08120144461'),
+    ('miracle', '07040035664'),
+    ('Onyinye', null);
+
+create temporary table im_su_utility_videography_technical(id uuid) on commit drop;
+insert into im_su_utility_videography_technical
+select id from subunits where public.im_name_key(name) = public.im_name_key('Utility (Videography & Technical)');
+
+do $$
+begin
+  if not exists (select 1 from im_su_utility_videography_technical) then
+    raise exception 'No subunit named "Utility (Videography & Technical)" exists. Create it under Admin -> Subunits first.';
+  end if;
+end $$;
+
+-- Resolve each sheet line to one account. An account can only be claimed once.
+create temporary table im_hit_utility_videography_technical(listed_name text, user_id uuid) on commit drop;
+-- Tier 0: a hand-checked spelling difference.
+insert into im_hit_utility_videography_technical(listed_name, user_id)
+select distinct s.full_name, p.id
+from im_sheet_utility_videography_technical s
+join im_alias a on public.im_name_key(a.sheet_name) = public.im_name_key(s.full_name)
+join profiles p on public.im_name_key(p.full_name) = public.im_name_key(a.official_name)
+where p.member_status <> 'left';
+
+insert into im_hit_utility_videography_technical(listed_name, user_id)
+select distinct s.full_name, p.id
+from im_sheet_utility_videography_technical s
+join profiles p
+  on (public.im_phone_key(s.phone) is not null
+      and public.im_phone_key(s.phone) in (public.im_phone_key(p.phone),
+                                           public.im_phone_key(p.whatsapp_number)))
+  or public.im_name_set(s.full_name) = public.im_name_set(p.full_name)
+  or public.im_name_key(s.full_name) = public.im_name_key(p.full_name)
+where p.member_status <> 'left';
+
+-- Third tier: one name contained in the other ("Majesty Gift" inside
+-- "Majesty Gift Chijindu"), and ONLY when exactly one account fits. A
+-- shortened name that could be two people stays unmatched on purpose — that
+-- is how "Agbo Amarachi Grace" is kept apart from "Agbo Amarachi Emmanuella".
+insert into im_hit_utility_videography_technical(listed_name, user_id)
+select t.full_name, t.only_id
+from (
+  select s.full_name,
+         min(p.id::text)::uuid as only_id,
+         count(distinct p.id)  as fits
+  from im_sheet_utility_videography_technical s
+  join profiles p
+    on array_length(public.im_name_arr(s.full_name), 1) >= 2
+   -- Both sides need two names. A one-word account ("Chiamaka") is contained
+   -- in every sheet line that happens to use that name, which would make it a
+   -- magnet claiming the wrong person.
+   and array_length(public.im_name_arr(p.full_name), 1) >= 2
+   and (public.im_name_arr(s.full_name) <@ public.im_name_arr(p.full_name)
+        or public.im_name_arr(p.full_name) <@ public.im_name_arr(s.full_name))
+  where p.member_status <> 'left'
+    and not exists (select 1 from im_hit_utility_videography_technical h where h.listed_name = s.full_name)
+    and p.id not in (select user_id from im_hit_utility_videography_technical)
+  group by s.full_name
+) t
+where t.fits = 1;
+
+create temporary table im_resolved_utility_videography_technical(user_id uuid primary key) on commit drop;
+insert into im_resolved_utility_videography_technical
+select user_id from im_hit_utility_videography_technical group by user_id;
+
+insert into im_unmatched(unit, listed_name)
+select 'Utility (Videography & Technical)', s.full_name
+from im_sheet_utility_videography_technical s
+where not exists (select 1 from im_hit_utility_videography_technical h where h.listed_name = s.full_name);
+
+-- Take out anyone currently primary here who is not on the sheet.
+with gone as (
+  delete from subunit_members sm
+  using im_su_utility_videography_technical su
+  where sm.subunit_id = su.id
+    and sm.membership_type = 'primary'
+    and sm.user_id not in (select user_id from im_resolved_utility_videography_technical)
+  returning 1
+)
+insert into im_report select 'Utility (Videography & Technical)', 'removed from unit', count(*) from gone;
+
+-- A person has exactly one primary unit, so clear any primary elsewhere.
+delete from subunit_members sm
+where sm.membership_type = 'primary'
+  and sm.user_id in (select user_id from im_resolved_utility_videography_technical)
+  and sm.subunit_id <> (select id from im_su_utility_videography_technical);
+
+-- Already in this unit as a secondary member: promote rather than duplicate.
+with up as (
+  update subunit_members sm
+  set membership_type = 'primary'
+  from im_su_utility_videography_technical su
+  where sm.subunit_id = su.id
+    and sm.user_id in (select user_id from im_resolved_utility_videography_technical)
+    and sm.membership_type <> 'primary'
+  returning 1
+)
+insert into im_report select 'Utility (Videography & Technical)', 'promoted to primary', count(*) from up;
+
+with ins as (
+  insert into subunit_members (user_id, subunit_id, membership_type)
+  select r.user_id, su.id, 'primary'
+  from im_resolved_utility_videography_technical r, im_su_utility_videography_technical su
+  on conflict (subunit_id, user_id) do nothing
+  returning 1
+)
+insert into im_report select 'Utility (Videography & Technical)', 'added as primary', count(*) from ins;
 
 -- ============================================================================
 --  RESULTS

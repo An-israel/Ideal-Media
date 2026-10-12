@@ -28,16 +28,15 @@ begin;
 create temporary table im_unmatched(unit text, listed_name text) on commit drop;
 create temporary table im_report(unit text, action text, n int) on commit drop;
 
--- No spelling differences needed for this sheet — every name below matches the
--- members list as written — but the table is created because the shared
--- matching block below refers to it.
 create temporary table im_alias(sheet_name text, official_name text) on commit drop;
+-- Left empty: every name on this sheet matches the members list as
+-- written. The table exists because the matching block below joins it.
 
 -- ----------------------------------------------------------------------------
 --  Step 1 — put back anyone on this sheet who was removed.
 -- ----------------------------------------------------------------------------
-create temporary table im_sm_sheet(full_name text, phone text) on commit drop;
-insert into im_sm_sheet(full_name, phone) values
+create temporary table im_solo_sheet(full_name text, phone text) on commit drop;
+insert into im_solo_sheet(full_name, phone) values
     ('Ezeora Evangel Oluomachi', '09018149235'),
     ('Ibeabuchi Adanna', '07068960169'),
     ('Izuegbulam Chinwe Blessing', '09130376636'),
@@ -63,7 +62,7 @@ create temporary table im_restored(id uuid, full_name text) on commit drop;
 
 with onsheet as (
   select distinct p.id
-  from im_sm_sheet s
+  from im_solo_sheet s
   join profiles p
     on (public.im_phone_key(s.phone) is not null
         and public.im_phone_key(s.phone) in (public.im_phone_key(p.phone),
@@ -74,6 +73,11 @@ with onsheet as (
         and array_length(public.im_name_arr(p.full_name), 1) >= 2
         and (public.im_name_arr(s.full_name) <@ public.im_name_arr(p.full_name)
              or public.im_name_arr(p.full_name) <@ public.im_name_arr(s.full_name)))
+    or exists (
+         select 1 from im_alias a
+         where public.im_name_key(a.sheet_name) = public.im_name_key(s.full_name)
+           and public.im_name_key(a.official_name) = public.im_name_key(p.full_name)
+       )
 )
 insert into im_restored(id, full_name)
 select p.id, p.full_name
@@ -99,19 +103,25 @@ end $$;
 -- ----------------------------------------------------------------------------
 --  Step 2 — the unit itself.
 -- ----------------------------------------------------------------------------
--- Who is primary somewhere else right now, so the move can be reported rather
--- than happening quietly.
+-- Who is primary somewhere else right now. A person has exactly one primary
+-- unit, so putting them here takes them out of that one — which is reported
+-- rather than happening quietly, because it changes who counts whom.
 create temporary table im_moved(full_name text, from_unit text) on commit drop;
 
 insert into im_moved(full_name, from_unit)
 select p.full_name, s.name
-from im_sm_sheet sh
+from im_solo_sheet sh
 join profiles p
   on (public.im_phone_key(sh.phone) is not null
       and public.im_phone_key(sh.phone) in (public.im_phone_key(p.phone),
                                             public.im_phone_key(p.whatsapp_number)))
   or public.im_name_set(sh.full_name) = public.im_name_set(p.full_name)
   or public.im_name_key(sh.full_name) = public.im_name_key(p.full_name)
+  or exists (
+       select 1 from im_alias a
+       where public.im_name_key(a.sheet_name) = public.im_name_key(sh.full_name)
+         and public.im_name_key(a.official_name) = public.im_name_key(p.full_name)
+     )
 join subunit_members sm on sm.user_id = p.id and sm.membership_type = 'primary'
 join subunits s on s.id = sm.subunit_id
 where public.im_name_key(s.name) <> public.im_name_key('Social Media');
@@ -250,10 +260,10 @@ insert into im_report select 'Social Media', 'added as primary', count(*) from i
 -- ----------------------------------------------------------------------------
 --  RESULTS
 -- ----------------------------------------------------------------------------
-select full_name as put_back_because_they_are_in_social_media from im_restored
+select full_name as put_back_because_they_are_in_this_unit from im_restored
 order by full_name;
 
-select distinct full_name as moved_here_from, from_unit from im_moved
+select distinct full_name as moved_here, from_unit as taken_out_of from im_moved
 order by from_unit, full_name;
 
 select unit, action, n from im_report order by unit, action;

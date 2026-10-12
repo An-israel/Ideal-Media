@@ -32,7 +32,8 @@ insert into im_alias(sheet_name, official_name) values
   ('Favour Mmesoma',           'Chinanu Favour Nmesoma'),
   ('Agbo Amarachi Grace',      'Agbo Amarachi Emmanuella'),
   ('Agbo Grace A',             'Agbo Amarachi Emmanuella'),
-  ('Owan Flourish',            'Owan Flourish Worma');
+  ('Owan Flourish',            'Owan Flourish Worma'),
+  ('omekodinma Victoria',      'Victoria Omekaodinma');
 
 create temporary table im_sheet_all(full_name text, phone text) on commit drop;
 insert into im_sheet_all(full_name, phone) values
@@ -145,7 +146,39 @@ insert into im_sheet_all(full_name, phone) values
     ('Ugochi', null),
     ('Vera Chiamaka', null),
     ('Destiny', null),
-    ('Cynthia', null);
+    ('Cynthia', null),
+    -- Technical (Utility). Two numbers are left out on purpose: kelvin's
+    -- 07088980666 is Chika Chukwuelokalum Benedict's on the members list, and
+    -- gift Eze's 070676502264 has twelve digits.
+    ('divine oluwa', '08084477742'),
+    ('Aniobi smiles', '08152878749'),
+    ('Chibueze nwachukwu', '08146359618'),
+    ('Chidibere success', '09119229230'),
+    ('Ezenwa Emmanuel', '08023813695'),
+    ('Ifeoma Nnam', '08086478211'),
+    ('David Milagro', '09060694909'),
+    ('Nathaniel Peter', '07087135592'),
+    ('okereke goodness', '08117828223'),
+    ('Oluchi Eze', '09031277384'),
+    ('Pamela Orji', '07061669987'),
+    ('precious Okechukwu', '07047146684'),
+    ('Somto okafor', '09015589563'),
+    ('Rhema ubakibie', '08166364341'),
+    ('Samuel nwaigwe', '07044205365'),
+    ('Sunday divine', '08112175408'),
+    ('victor igattah', '09130254153'),
+    ('omekodinma Victoria', '08168818299'),
+    ('Benedicta Onyema', '09117365805'),
+    ('gift Eze', null),
+    ('Goodness chukwuajah', '07041752149'),
+    ('Joshua chibuenyim', '09068068385'),
+    ('kelvin', null),
+    ('Michelle', '09049291694'),
+    ('Favour', '07019199742'),
+    ('Chiwendu', '09167975892'),
+    ('Daniel', '08120144461'),
+    ('miracle', '07040035664'),
+    ('Onyinye', null);
 
 -- Put back anyone on a subunit sheet who was removed.
 create temporary table im_restored(id uuid, full_name text) on commit drop;
