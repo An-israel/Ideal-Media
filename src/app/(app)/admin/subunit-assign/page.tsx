@@ -2,12 +2,27 @@ import { notFound } from "next/navigation";
 import { getSessionRoles } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/app/page-header";
+import { MigrationNotice } from "@/components/app/migration-notice";
+import { memberAccessMigrations } from "@/lib/schema-check";
 import { AssignFlow } from "./assign-flow";
 
 export default async function SubunitAssignPage() {
   const session = await getSessionRoles();
   if (!session) return null;
   if (!session.roles.includes("super_admin")) notFound();
+
+  const needs = await memberAccessMigrations();
+  if (needs.length > 0) {
+    return (
+      <div>
+        <PageHeader
+          title="Assign subunits"
+          description="Paste a unit's member sheet and assign everyone on it."
+        />
+        <MigrationNotice needs={needs} />
+      </div>
+    );
+  }
 
   const admin = createAdminClient();
   const { data: subunits } = await admin

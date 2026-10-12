@@ -13,6 +13,8 @@ import {
   isLate,
 } from "@/lib/attendance-window";
 import { WeekPicker } from "./week-picker";
+import { MigrationNotice } from "@/components/app/migration-notice";
+import { attendanceMigrations } from "@/lib/schema-check";
 import { formatReportDate } from "@/lib/attendance-report";
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
@@ -33,6 +35,22 @@ export default async function AttendanceHubPage({
     session.roles.includes("welfare");
   const canSubmit = privileged || session.ledSubunitIds.length > 0;
   if (!canSubmit) return null;
+
+  // Attendance needs migration 0014. Without it every read below fails and the
+  // page shows a generic error, which is indistinguishable from the feature
+  // never having deployed.
+  const migrationsNeeded = await attendanceMigrations();
+  if (migrationsNeeded.length > 0) {
+    return (
+      <div>
+        <PageHeader
+          title="Attendance"
+          description="Report who was present for each service."
+        />
+        <MigrationNotice needs={migrationsNeeded} />
+      </div>
+    );
+  }
 
   const admin = createAdminClient();
   const { sunday, bibleStudy } = await getServiceActivities();

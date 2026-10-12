@@ -35,6 +35,8 @@ export function RosterSyncFlow({
   const [decisions, setDecisions] = useState<Record<number, Decision>>({});
   const [reason, setReason] = useState("Not on the current members list");
   const [confirmText, setConfirmText] = useState("");
+  /** Opt-in: role holders are never removed automatically. */
+  const [alsoRemoveRoleHolders, setAlsoRemoveRoleHolders] = useState(false);
 
   function runPreview(skipPositions: number[] = []) {
     start(async () => {
@@ -84,13 +86,19 @@ export function RosterSyncFlow({
   const { plan, parsed } = preview;
   const undecided = plan.confirm.filter((c) => !decisions[c.listed.position]);
 
-  const revokeIds = plan.revoke.map((a) => a.id);
+  const revokeIds = [
+    ...plan.revoke.map((a) => a.id),
+    ...(alsoRemoveRoleHolders ? plan.protectedFromRevoke.map((a) => a.id) : []),
+  ];
   const createRows = [
     ...plan.create.map((m) => ({ name: m.name, phone: m.phone })),
     ...plan.confirm
       .filter((c) => decisions[c.listed.position]?.kind === "create")
       .map((c) => ({ name: c.listed.name, phone: c.listed.phone })),
   ];
+
+  // What the department actually cares about: how many accounts stay active.
+  const activeAfter = preview.accountsOnSite - revokeIds.length + createRows.length;
 
   const ready = undecided.length === 0 && confirmText.trim().toUpperCase() === "REMOVE";
 
@@ -136,6 +144,11 @@ export function RosterSyncFlow({
             <Stat label="Will lose access" value={plan.revoke.length} tone="danger" />
             <Stat label="Will be created" value={createRows.length} />
             <Stat label="Need your decision" value={undecided.length} tone="warning" />
+            <Stat
+              label="Active after this"
+              value={activeAfter}
+              tone={activeAfter > parsed.total ? "warning" : "success"}
+            />
           </div>
 
           <Warn>
@@ -143,6 +156,17 @@ export function RosterSyncFlow({
             drop off every roster and future report, but their attendance history is kept and
             past reports still read exactly as you sent them. You can restore any of them here.
           </Warn>
+
+          {activeAfter > parsed.total && (
+            <Warn>
+              {activeAfter} accounts would stay active, but your list has {parsed.total} names.
+              The difference is{" "}
+              {plan.protectedFromRevoke.length > 0 && !alsoRemoveRoleHolders
+                ? `the ${plan.protectedFromRevoke.length} role holder(s) below, which are not removed automatically`
+                : "accounts still awaiting a decision above"}
+              .
+            </Warn>
+          )}
 
           {parsed.possibleDuplicates.map(({ a, b }) => (
             <Warn key={`${a.position}-${b.position}`}>
@@ -239,10 +263,10 @@ export function RosterSyncFlow({
               {plan.protectedFromRevoke.length === 1 ? "" : "s"} protected
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 pb-5">
+          <CardContent className="space-y-3 pb-5">
             <p className="text-sm text-[var(--text-muted)]">
-              Not on your list, but they hold a role, so they are <strong>not</strong> being
-              removed. Remove them by hand if that is really what you want.
+              Not on your list, but they hold a role. They are kept by default so this cannot
+              lock out your secretary, welfare team or your own second account by accident.
             </p>
             <ul className="space-y-1 text-sm">
               {plan.protectedFromRevoke.map((a) => (
@@ -251,6 +275,19 @@ export function RosterSyncFlow({
                 </li>
               ))}
             </ul>
+            <label className="flex items-start gap-2 rounded-lg border border-[var(--danger)]/30 bg-[var(--danger)]/10 px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={alsoRemoveRoleHolders}
+                onChange={(e) => setAlsoRemoveRoleHolders(e.target.checked)}
+              />
+              <span>
+                Remove {plan.protectedFromRevoke.length === 1 ? "this account" : "these accounts"}{" "}
+                too &mdash; the list is the list. Read the names above first; your own account is
+                never removed.
+              </span>
+            </label>
           </CardContent>
         </Card>
       )}
