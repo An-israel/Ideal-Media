@@ -1,5 +1,12 @@
 import Link from "next/link";
-import { ClipboardList, FileText, ClipboardPaste, AlertTriangle, CheckCircle2 } from "lucide-react";
+import {
+  ClipboardList,
+  FileText,
+  ClipboardPaste,
+  AlertTriangle,
+  CheckCircle2,
+  Eye,
+} from "lucide-react";
 import { getSessionRoles } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getServiceActivities, getSubmissions } from "@/lib/attendance-queries";
@@ -65,11 +72,20 @@ export default async function AttendanceHubPage({
     : thisWeek;
   const dates = weekServices(weekSunday);
 
-  // Which subunits this person is responsible for.
-  const { data: allSubunits } = await admin.from("subunits").select("id, name").order("name");
+  // Which subunits this person is responsible for. The category matters:
+  // secondary units (Video Editing, Graphic Design, Welfare, Secretary,
+  // Publication) do not file their own attendance, because their members are
+  // counted by the primary unit they belong to. Listing them as "0 members,
+  // pending" looked like the data had been lost, so they get a read-only view
+  // and are left out of the outstanding count.
+  const { data: allSubunits } = await admin
+    .from("subunits")
+    .select("id, name, category")
+    .order("name");
   const mine = privileged
     ? allSubunits ?? []
     : (allSubunits ?? []).filter((s) => session.ledSubunitIds.includes(s.id));
+  const reportsOwnAttendance = (s: { category: string }) => s.category === "primary";
 
   const services = [
     sunday ? { activity: sunday, date: dates.sunday, label: "Sunday Service" } : null,
@@ -119,7 +135,9 @@ export default async function AttendanceHubPage({
           const deadline = deadlineFor(s.date);
           const held = hasOccurred(s.date);
           const overdue = held && isLate(s.date);
-          const outstanding = mine.filter((su) => !submissions.has(su.id));
+          const outstanding = mine
+            .filter(reportsOwnAttendance)
+            .filter((su) => !submissions.has(su.id));
 
           return (
             <Card key={s.activity.id}>
@@ -158,6 +176,31 @@ export default async function AttendanceHubPage({
                 )}
                 {mine.map((su) => {
                   const sub = submissions.get(su.id);
+
+                  // A secondary unit has nothing to submit — its members are
+                  // reported by their primary unit — so it gets its roll to
+                  // look at rather than a form that would count people twice.
+                  if (!reportsOwnAttendance(su)) {
+                    return (
+                      <div key={su.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{su.name}</p>
+                          <p className="text-xs text-[var(--text-muted)]">
+                            Counted by each member&apos;s primary unit
+                          </p>
+                        </div>
+                        <Badge variant="neutral">No submission needed</Badge>
+                        <Link
+                          href={`/attendance/view?subunit=${su.id}&activity=${s.activity.id}&date=${s.date}`}
+                        >
+                          <Button size="sm" variant="outline">
+                            <Eye className="h-4 w-4" /> View members
+                          </Button>
+                        </Link>
+                      </div>
+                    );
+                  }
+
                   return (
                     <div key={su.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
                       <div className="min-w-0 flex-1">

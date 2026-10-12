@@ -351,3 +351,81 @@ export async function getServiceActivities() {
     bibleStudy: byName.get("Bible Study") ?? null,
   };
 }
+
+export interface SubunitMember {
+  userId: string;
+  fullName: string;
+  memberStatus: string;
+  /** The subunit that actually reports this person's attendance. */
+  reportingSubunitId: string | null;
+  reportingSubunitName: string | null;
+}
+
+/**
+ * Everyone who belongs to a subunit, in any capacity, with the subunit that
+ * reports them.
+ *
+ * This is NOT getSubunitRoster(). A secondary subunit — Video Editing, Graphic
+ * Design, Welfare, Secretary, Publication — reports nobody: its members hold
+ * their primary membership in Production, Photography, Projection or Social
+ * Media, and that is where their attendance is taken, so that the department
+ * total stays the sum of its parts. getSubunitRoster() therefore returns an
+ * empty list for such a unit, which is correct for submitting and useless for
+ * looking at: "Video Editing (0)" reads as data loss when it is really
+ * "reported elsewhere".
+ *
+ * So this returns the membership as it stands, and names the unit each person
+ * is counted under, for a read-only view.
+ */
+export async function getSubunitMembership(subunitId: string): Promise<SubunitMember[]> {
+  const admin = createAdminClient();
+
+  const rows = await fetchAllRows<{ user_id: string }>((from, to) =>
+    admin.from("subunit_members").select("user_id").eq("subunit_id", subunitId).range(from, to)
+  );
+  const memberIds = [...new Set(rows.map((r) => r.user_id))];
+  if (memberIds.length === 0) return [];
+
+  // Memberships everywhere, because the reporting unit may be a different one.
+  const memberships = await fetchAllRows<{
+    user_id: string;
+    subunit_id: string;
+    membership_type: "primary" | "secondary";
+    role_in_subunit: "member" | "leader";
+  }>((from, to) =>
+    admin
+      .from("subunit_members")
+      .select("user_id, subunit_id, membership_type, role_in_subunit")
+      .in("user_id", memberIds)
+      .range(from, to)
+  );
+
+  const reporting = resolveReportingSubunits(
+    memberships.map((m) => ({
+      userId: m.user_id,
+      subunitId: m.subunit_id,
+      membershipType: m.membership_type,
+      roleInSubunit: m.role_in_subunit,
+    }))
+  );
+
+  const [profiles, { data: subunitRows }] = await Promise.all([
+    loadMemberRows(admin, memberIds),
+    admin.from("subunits").select("id, name"),
+  ]);
+  const subunitName = new Map((subunitRows ?? []).map((s) => [s.id, s.name]));
+
+  return profiles
+    .filter((p) => !["graduated", "left"].includes(p.member_status) && p.access_revoked_at === null)
+    .map((p) => {
+      const reportedBy = reporting.get(p.id) ?? null;
+      return {
+        userId: p.id,
+        fullName: p.full_name,
+        memberStatus: p.member_status,
+        reportingSubunitId: reportedBy,
+        reportingSubunitName: reportedBy ? subunitName.get(reportedBy) ?? null : null,
+      };
+    })
+    .sort((a, b) => a.fullName.localeCompare(b.fullName));
+}

@@ -123,7 +123,29 @@ insert into im_sheet_all(full_name, phone) values
     ('Chinenye', null),
     ('Divine Oluwa', null),
     ('Favour Mmesoma', null),
-    ('Agu Chibueze', null);
+    ('Agu Chibueze', null),
+    -- Social Media. James Chiamaka is left out on purpose: the sheet marks
+    -- him withdrawn, so he is not put back.
+    ('Ezeora Evangel Oluomachi', '09018149235'),
+    ('Ibeabuchi Adanna', '07068960169'),
+    ('Izuegbulam Chinwe Blessing', '09130376636'),
+    ('Success Eziashi Ebubechukwu', '08101261442'),
+    ('Uzoechi Deborah Chiamaka', '08112288230'),
+    ('Okechukwu chidimma', '07080598886'),
+    ('Ezechi Chinwe', null),
+    ('Ezenwosu Chioma Vanessa', '08135188825'),
+    ('Onwukeme zara', '08146450684'),
+    ('Metu Amarachim', '08060283236'),
+    ('Agu Vitalis Chukwuemerie', '07016639391'),
+    ('Nwachukwu Chibueze', null),
+    ('Eze Chidiebube Ihuoma', null),
+    ('Abanokwu Bethel Chielotam', null),
+    ('Ugochukwu Christopher', null),
+    ('Ikechukwu Success', null),
+    ('Ugochi', null),
+    ('Vera Chiamaka', null),
+    ('Destiny', null),
+    ('Cynthia', null);
 
 -- Put back anyone on a subunit sheet who was removed.
 create temporary table im_restored(id uuid, full_name text) on commit drop;
@@ -138,6 +160,7 @@ with onsheet as (
     or public.im_name_set(s.full_name) = public.im_name_set(p.full_name)
     or public.im_name_key(s.full_name) = public.im_name_key(p.full_name)
     or (array_length(public.im_name_arr(s.full_name), 1) >= 2
+        and array_length(public.im_name_arr(p.full_name), 1) >= 2
         and (public.im_name_arr(s.full_name) <@ public.im_name_arr(p.full_name)
              or public.im_name_arr(p.full_name) <@ public.im_name_arr(s.full_name)))
     or exists (
@@ -189,6 +212,7 @@ where not exists (
      or public.im_name_set(s.full_name) = public.im_name_set(p.full_name)
      or public.im_name_key(s.full_name) = public.im_name_key(p.full_name)
      or (array_length(public.im_name_arr(s.full_name), 1) >= 2
+         and array_length(public.im_name_arr(p.full_name), 1) >= 2
          and (public.im_name_arr(s.full_name) <@ public.im_name_arr(p.full_name)
               or public.im_name_arr(p.full_name) <@ public.im_name_arr(s.full_name)))
      or exists (

@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getSessionRoles } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSubunitRoster, getRecordsFor } from "@/lib/attendance-queries";
@@ -29,11 +29,19 @@ export default async function SubmitAttendancePage({
 
   const admin = createAdminClient();
   const [{ data: subunitRow }, { data: activityRow }, roster] = await Promise.all([
-    admin.from("subunits").select("id, name").eq("id", subunit).maybeSingle(),
+    admin.from("subunits").select("id, name, category").eq("id", subunit).maybeSingle(),
     admin.from("activities").select("id, name").eq("id", activity).maybeSingle(),
     getSubunitRoster([subunit]),
   ]);
   if (!subunitRow || !activityRow) notFound();
+
+  // A secondary unit's members are counted by their primary unit. Submitting
+  // here would report the same people twice and break the department total, so
+  // the form is not offered — the read-only roll is shown instead. This guards
+  // a hand-typed URL; the hub already links secondary units to that view.
+  if (subunitRow.category !== "primary") {
+    redirect(`/attendance/view?subunit=${subunit}&activity=${activity}&date=${date}`);
+  }
 
   const existing = await getRecordsFor(activity, date, roster.map((r) => r.userId));
   const { data: submission } = await admin

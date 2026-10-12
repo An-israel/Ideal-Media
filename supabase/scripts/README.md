@@ -14,6 +14,7 @@ click **Run**, in this order. Scripts 1 and 4 change nothing on their own.
 | `04_remove_not_on_list.sql` | yes | Marks everyone not on the 101-name list as `left`. |
 | `05_assign_subunits.sql` | yes | Replaces each unit's membership with its sheet. |
 | `07_keep_subunit_people.sql` | yes | Puts back anyone a subunit sheet lists, and names who still has no account. |
+| `08_social_media.sql` | yes | Social Media on its own: puts its people back and makes them primary members. Complete in itself; run it after `00`. |
 | `06_undo.sql` | on request | Puts a person, or everyone, back. |
 
 ## The rule, as the department states it
@@ -28,6 +29,47 @@ members. `07` puts them back. Run `04`, then `07`, then `05`.
 app — **Admin → Members list**, pasting `combined-members-list.txt` — rather
 than by SQL, so the login is created properly through Supabase's own API.
 Then re-run `05_assign_subunits.sql`.
+
+## Social Media arrived later
+
+`08_social_media.sql` is the whole Social Media sheet on its own, because `05`
+and `07` had already been run against the live site by the time it came in. It
+needs only `00_helpers.sql` before it, does both jobs for those 20 names (puts
+back anyone `04` had removed, then makes them primary members of Social Media),
+and is safe to run twice. `05` and `07` now carry the same names too, so a run
+from scratch gives the same result either way.
+
+**James Chiamaka is deliberately left out.** The sheet marks him withdrawn —
+"has another church" — so he is neither put back nor added to the unit.
+
+Four names on that sheet have no surname and no number: **Ugochi**, **Vera
+Chiamaka**, **Destiny**, **Cynthia**. `08` matches the first two if an account
+already uses that exact name; the rest are reported as `matched_nobody` rather
+than guessed at.
+
+## Why Video Editing shows 0 on the attendance page — and why that is right
+
+Attendance is counted **once per person, by their primary unit**. That is what
+makes the department total equal the sum of the subunits. Video Editing,
+Graphic Design, Welfare, Secretary and Publication are *secondary* units: their
+members hold their primary membership in Production, Photography, Projection or
+Social Media, and their attendance is taken there.
+
+So a secondary unit reports nobody, and a roster built from it is empty — the
+`0` was arithmetic, not lost data. Two things made it look like a fault:
+
+1. A real bug, now fixed: `05` used to clear only `membership_type = 'secondary'`
+   rows from a secondary unit, so three people left over as *primary* in Video
+   Editing survived — and they were the only names its attendance page showed.
+   It now clears any membership not on the sheet and demotes anyone wrongly
+   primary there.
+2. The page offered a submission form and a "0 outstanding" count for a unit
+   that has nothing to submit. It now says *"Counted by each member's primary
+   unit"* and links to **View members**, a read-only list of everyone in the
+   unit with the status their primary unit recorded for them.
+
+Giving Video Editing its own submission would count 20 people twice and stop
+the department total adding up, so that is not offered.
 
 ## What "removed" means
 

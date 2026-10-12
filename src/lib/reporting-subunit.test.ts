@@ -91,3 +91,40 @@ describe("resolveReportingSubunits — the invariant", () => {
     expect(total).toBe(2);
   });
 });
+
+describe("a secondary subunit's own roll", () => {
+  // Why Video Editing showed 0. Everyone in it holds their primary membership
+  // in Production, Photography, Projection or Social Media, which is where
+  // their attendance is taken — so resolveReportingSubunits() never names
+  // Video Editing, and a roster built from it is empty. That is correct for
+  // submitting (counting them again would break the department total) and
+  // wrong as a display, which is what /attendance/view exists for.
+  it("reports nobody, even though it has members", () => {
+    const rows = [
+      { userId: "dennis", ...primary("production") },
+      { userId: "dennis", ...secondary("video-editing") },
+      { userId: "victoria", ...primary("projection") },
+      { userId: "victoria", ...secondary("video-editing") },
+    ];
+    const reporting = resolveReportingSubunits(rows);
+    expect([...reporting.values()]).not.toContain("video-editing");
+    expect(reporting.get("dennis")).toBe("production");
+    expect(reporting.get("victoria")).toBe("projection");
+  });
+
+  it("still reports its leader through their own primary unit", () => {
+    const reporting = resolveReportingSubunits([
+      { userId: "lilian", ...primary("photography") },
+      { userId: "lilian", ...secondary("video-editing", true) },
+    ]);
+    expect(reporting.get("lilian")).toBe("photography");
+  });
+
+  it("falls back to the secondary unit for a leader with no primary anywhere", () => {
+    // Then they do appear on its roll, because otherwise nobody counts them.
+    const reporting = resolveReportingSubunits([
+      { userId: "lilian", ...secondary("video-editing", true) },
+    ]);
+    expect(reporting.get("lilian")).toBe("video-editing");
+  });
+});
