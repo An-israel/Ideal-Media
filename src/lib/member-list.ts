@@ -68,6 +68,50 @@ export function looksLikeNigerianMobile(digits: string): boolean {
   return d.length === 10 && "789".includes(d[0]);
 }
 
+/**
+ * Separates a trailing phone number from a name.
+ *
+ * The lists arrive in several shapes — "Name - 08012345678" from the master
+ * roll, "Name<tab>09034420395" from the unit sheets, and "Moses +234 704 111
+ * 8511" with the number spaced out. So the number is found by walking back
+ * from the end collecting anything that could be part of one, rather than by
+ * splitting on a separator that is not always there.
+ *
+ * Walking from the end also protects hyphenated surnames: splitting on the
+ * first hyphen would cut "Austin-Nwaroh" and "Aja-Aki" in half, and splitting
+ * on the last would do the same to a name with no number after it.
+ */
+export function splitNameAndPhone(raw: string): { name: string; phone: string | null } {
+  const text = raw.trim();
+  // A bare trailing hyphen is a number that was never written down, as in the
+  // truncated "Ezechi Chinwe-".
+  if (/-\s*$/.test(text)) {
+    return { name: text.replace(/[-\s]+$/, "").trim(), phone: null };
+  }
+
+  const parts = text.split(/\s+/);
+  let i = parts.length;
+  let digits = 0;
+  while (i > 0) {
+    const part = parts[i - 1];
+    // Only a run made purely of number punctuation can belong to the phone.
+    if (!/^[+(]?[\d][\d()+-]*$/.test(part)) break;
+    digits += (part.match(/\d/g) ?? []).length;
+    i--;
+    // A Nigerian number never needs more than four groups; stopping here keeps
+    // a name that happens to end in a digit from being eaten.
+    if (parts.length - i >= 5) break;
+  }
+
+  if (digits >= 7 && i > 0) {
+    const name = parts.slice(0, i).join(" ").replace(/[-\s]+$/, "").trim();
+    if (name) {
+      return { name, phone: parts.slice(i).join("").replace(/\D/g, "") };
+    }
+  }
+  return { name: text.replace(/[-\s]+$/, "").trim(), phone: null };
+}
+
 export function parseMemberList(raw: string): ParsedMemberList {
   const members: ListedMember[] = [];
   const unreadable: { line: number; text: string }[] = [];
@@ -90,20 +134,8 @@ export function parseMemberList(raw: string): ParsedMemberList {
       continue;
     }
 
-    // Split on the LAST hyphen only when what follows is digits (or nothing,
-    // as in the truncated "Ezechi Chinwe-"). Splitting on the first hyphen
-    // would cut "Austin-Nwaroh" and "Aja-Aki" in half.
-    let name = rest;
-    let phone: string | null = null;
-    const dash = rest.lastIndexOf("-");
-    if (dash !== -1) {
-      const tail = rest.slice(dash + 1).trim();
-      if (tail === "" || /^[\d\s+()]+$/.test(tail)) {
-        name = rest.slice(0, dash).trim();
-        const digits = tail.replace(/\D/g, "");
-        phone = digits || null;
-      }
-    }
+    const { name: parsedName, phone } = splitNameAndPhone(rest);
+    let name = parsedName;
 
     name = clean(name);
     if (!name) {

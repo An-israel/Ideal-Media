@@ -118,3 +118,45 @@ describe("parsing oddities", () => {
     expect(r.members[0].name).toBe("Chidi Okeke");
   });
 });
+
+describe("the unit-list formats", () => {
+  // The subunit sheets separate the number with a tab or spaces rather than a
+  // dash, and sometimes write it out in groups.
+  const cases: [string, string, string | null][] = [
+    ["1. Nwokolo Kamsiyochukwu Philip\t09034420395", "Nwokolo Kamsiyochukwu Philip", "09034420395"],
+    ["2. Madukasi Godswill\t07069449149", "Madukasi Godswill", "07069449149"],
+    ["17. Moses +234 704 111 8511", "Moses", "2347041118511"],
+    ["18. Charles 810 111 5730", "Charles", "8101115730"],
+    ["5. Christian Okonkwo\t901 153 2264", "Christian Okonkwo", "9011532264"],
+    ["8. Emmanuel\t 0703 7526787", "Emmanuel", "07037526787"],
+    ["8. OGBONNA Precious C.\t8155113431", "OGBONNA Precious C.", "8155113431"],
+    ["4. Kalu Victoria", "Kalu Victoria", null],
+    ["5. Uche", "Uche", null],
+    ["12. God's Child Precious Munachiso", "God's Child Precious Munachiso", null],
+    ["31. Aja-aki Chioma", "Aja-aki Chioma", null],
+  ];
+
+  it.each(cases)("reads %j", (line, name, phone) => {
+    const r = parseMemberList(line as string);
+    expect(r.members).toHaveLength(1);
+    expect(r.members[0].name).toBe(name);
+    expect(r.members[0].phone).toBe(phone);
+  });
+
+  it("still reads the dash-separated master format", () => {
+    const r = parseMemberList("1.  Agbo Amarachi Emmanuella - 9022035639");
+    expect(r.members[0].name).toBe("Agbo Amarachi Emmanuella");
+    expect(r.members[0].phone).toBe("9022035639");
+  });
+
+  it("does not eat a hyphenated surname that has no number", () => {
+    const r = parseMemberList("100. Austin-Nwaroh Ogechukwu Precious");
+    expect(r.members[0].name).toBe("Austin-Nwaroh Ogechukwu Precious");
+  });
+
+  it("keeps a hyphenated surname when a number follows", () => {
+    const r = parseMemberList("95. David-Onuoha Mmesoma Milagro 9060694909");
+    expect(r.members[0].name).toBe("David-Onuoha Mmesoma Milagro");
+    expect(r.members[0].phone).toBe("9060694909");
+  });
+});
