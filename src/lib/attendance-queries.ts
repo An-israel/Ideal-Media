@@ -14,6 +14,42 @@ export interface RosterPerson {
 }
 
 /**
+ * Member rows, tolerating a database that has not run migration 0015 yet.
+ *
+ * Selecting a column that does not exist makes PostgREST reject the whole
+ * query, which would empty every attendance list rather than degrade. So the
+ * revoked column is asked for, and dropped on a retry if it is not there.
+ */
+async function loadMemberRows(
+  admin: ReturnType<typeof createAdminClient>,
+  userIds?: string[]
+): Promise<{ id: string; full_name: string; member_status: string; access_revoked_at: string | null }[]> {
+  type Row = {
+    id: string;
+    full_name: string;
+    member_status: string;
+    access_revoked_at?: string | null;
+  };
+  const read = (columns: string) =>
+    fetchAllRows<Row>((from, to) => {
+      let q = admin.from("profiles").select(columns);
+      if (userIds) q = q.in("id", userIds);
+      return q.range(from, to) as unknown as PromiseLike<{
+        data: Row[] | null;
+        error: { message: string } | null;
+      }>;
+    });
+
+  try {
+    const rows = await read("id, full_name, member_status, access_revoked_at");
+    return rows.map((r) => ({ ...r, access_revoked_at: r.access_revoked_at ?? null }));
+  } catch {
+    const rows = await read("id, full_name, member_status");
+    return rows.map((r) => ({ ...r, access_revoked_at: null }));
+  }
+}
+
+/**
  * Everyone a subunit reports on.
  *
  * Membership alone does not decide this — resolveReportingSubunit() does, so
@@ -72,18 +108,7 @@ export async function getSubunitRoster(subunitIds: string[]): Promise<RosterPers
   if (userIds.length === 0) return [];
 
   const [profiles, { data: subunitRows }] = await Promise.all([
-    fetchAllRows<{
-      id: string;
-      full_name: string;
-      member_status: string;
-      access_revoked_at: string | null;
-    }>((from, to) =>
-      admin
-        .from("profiles")
-        .select("id, full_name, member_status, access_revoked_at")
-        .in("id", userIds)
-        .range(from, to)
-    ),
+    loadMemberRows(admin, userIds),
     admin.from("subunits").select("id, name"),
   ]);
   const subunitName = new Map((subunitRows ?? []).map((s) => [s.id, s.name]));
@@ -111,14 +136,7 @@ export async function getSubunitRoster(subunitIds: string[]): Promise<RosterPers
 export async function getUnassignedMembers(): Promise<{ userId: string; fullName: string }[]> {
   const admin = createAdminClient();
   const [profiles, memberships] = await Promise.all([
-    fetchAllRows<{
-      id: string;
-      full_name: string;
-      member_status: string;
-      access_revoked_at: string | null;
-    }>((from, to) =>
-      admin.from("profiles").select("id, full_name, member_status, access_revoked_at").range(from, to)
-    ),
+    loadMemberRows(admin),
     fetchAllRows<{
       user_id: string;
       subunit_id: string;
