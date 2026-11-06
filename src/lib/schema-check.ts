@@ -52,6 +52,20 @@ export async function attendanceMigrations(): Promise<MigrationNeed[]> {
   return needs;
 }
 
+/** Migrations the Skills Academy depends on. */
+export async function academyMigrations(): Promise<MigrationNeed[]> {
+  const needs: MigrationNeed[] = [];
+  // A whole table is missing here, not a column, and PostgREST reports that
+  // the same way — so the same probe answers it.
+  if (!(await columnExists("academy_courses", "slug"))) {
+    needs.push({
+      file: "0017_skills_academy.sql",
+      feature: "the Skills Academy",
+    });
+  }
+  return needs;
+}
+
 /** Migrations the members-list and subunit tools depend on. */
 export async function memberAccessMigrations(): Promise<MigrationNeed[]> {
   const needs: MigrationNeed[] = [];

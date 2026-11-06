@@ -34,6 +34,7 @@ export type ModuleProgressStatus =
   | "approved";
 export type UploadStatus = "parsing" | "needs_review" | "committed" | "discarded";
 export type AttendanceStatus = "present" | "absent" | "traveled" | "excused";
+export type AcademyAssignmentKind = "self_check" | "link";
 export type AbsenceReason =
   | "illness"
   | "travelled"
@@ -299,6 +300,96 @@ export type TrainingSeries = {
   updated_at: string | null;
 };
 
+/** One Skills Academy course. `slug` is its identity: URL, cover file, import key. */
+export type AcademyCourse = {
+  id: string;
+  slug: string;
+  position: number;
+  title: string;
+  tagline: string | null;
+  description: string | null;
+  category: string;
+  level: string;
+  weeks: number | null;
+  /** True when practical lessons carry both a phone and a laptop video. */
+  dual: boolean;
+  outcomes: string[];
+  tools: { phone?: string; laptop?: string };
+  cover_path: string | null;
+  is_published: boolean;
+  created_at: string;
+  updated_at: string | null;
+};
+
+export type AcademyModule = {
+  id: string;
+  course_id: string;
+  position: number;
+  title: string;
+  goal: string | null;
+  created_at: string;
+};
+
+export type AcademyVideo = { youtube_id: string; title: string; url: string };
+
+/**
+ * Either one list for everybody, or one per device. The first entry is the
+ * lesson's video; the rest are backups for when a video is taken down.
+ */
+export type AcademyVideos = {
+  any?: AcademyVideo[];
+  phone?: AcademyVideo[];
+  laptop?: AcademyVideo[];
+};
+
+export type AcademyLesson = {
+  id: string;
+  module_id: string;
+  position: number;
+  title: string;
+  summary: string | null;
+  practical: boolean;
+  search_query: string | null;
+  videos: AcademyVideos;
+  created_at: string;
+};
+
+export type AcademyAssignment = {
+  id: string;
+  module_id: string;
+  kind: AcademyAssignmentKind;
+  title: string;
+  instructions: string;
+  checklist: string[];
+  created_at: string;
+};
+
+export type AcademyLessonProgress = {
+  id: string;
+  user_id: string;
+  lesson_id: string;
+  completed_at: string;
+};
+
+export type AcademySubmission = {
+  id: string;
+  user_id: string;
+  assignment_id: string;
+  link: string | null;
+  /** Indexes of the checklist items ticked, for a self-check assignment. */
+  checked: number[];
+  submitted_at: string;
+  updated_at: string | null;
+};
+
+export type AcademyCertificate = {
+  id: string;
+  user_id: string;
+  course_id: string;
+  code: string;
+  issued_at: string;
+};
+
 export type TrainingTeaching = {
   id: string;
   series_id: string;
@@ -423,6 +514,13 @@ export type Database = {
       attendance_records: TableDef<AttendanceRecord>;
       attendance_submissions: TableDef<AttendanceSubmission>;
       monthly_attendance_summary: TableDef<MonthlyAttendanceSummary>;
+      academy_courses: TableDef<AcademyCourse>;
+      academy_modules: TableDef<AcademyModule>;
+      academy_lessons: TableDef<AcademyLesson>;
+      academy_assignments: TableDef<AcademyAssignment>;
+      academy_lesson_progress: TableDef<AcademyLessonProgress>;
+      academy_submissions: TableDef<AcademySubmission>;
+      academy_certificates: TableDef<AcademyCertificate>;
       training_series: TableDef<TrainingSeries>;
       training_teachings: TableDef<TrainingTeaching>;
       teaching_progress: TableDef<TeachingProgress>;
@@ -461,6 +559,10 @@ export type Database = {
           instructor_name: string | null;
           has_whatsapp: boolean | null;
         }[];
+      };
+      academy_course_complete: {
+        Args: { c_id: string; u_id: string };
+        Returns: boolean;
       };
     };
     Enums: { [_ in never]: never };

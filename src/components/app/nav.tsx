@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   GraduationCap,
+  BookOpen,
   Headphones,
   Network,
   Users,
@@ -29,7 +30,8 @@ const ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   // Open to every member: department-wide teaching, and the subunit directory.
   { href: "/training", label: "General Training", icon: Headphones },
-  { href: "/courses", label: "My Courses", icon: GraduationCap },
+  { href: "/academy", label: "Skills Academy", icon: GraduationCap },
+  { href: "/courses", label: "My Courses", icon: BookOpen },
   { href: "/subunits", label: "Subunits", icon: Network },
   // Weekly attendance reporting. Subunit leaders report their own people;
   // secretary and welfare can report for any subunit and paste the department
