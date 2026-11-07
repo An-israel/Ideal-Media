@@ -14,6 +14,12 @@ import type { AcademyAssignmentKind, AcademyVideos } from "@/lib/database.types"
  * the Supabase editor, which is how the earlier roster work went and was
  * painful every time.
  *
+ * Everything is written in BULK — a handful of requests, not one per row. The
+ * first version of this walked the tree and wrote a row at a time, which is
+ * about 860 sequential round-trips to Supabase: half a minute or more, against
+ * a serverless function that is killed long before that. Ten calls finish in
+ * about a second.
+ *
  * The import is idempotent and keyed on the slug and on position, so running
  * it again updates the courses in place. That matters for a second reason: a
  * member's progress points at lesson and assignment ids, so an import that
@@ -69,14 +75,15 @@ interface SourceCourse {
   modules: SourceModule[];
 }
 
+const SOURCE = academy.courses as unknown as SourceCourse[];
+
 /** What the bundled file describes, without touching the database. */
 export function academySummary() {
-  const courses = academy.courses as unknown as SourceCourse[];
   let modules = 0;
   let lessons = 0;
   let videos = 0;
   let assignments = 0;
-  for (const c of courses) {
+  for (const c of SOURCE) {
     modules += c.modules.length;
     for (const m of c.modules) {
       lessons += m.lessons.length;
@@ -89,7 +96,7 @@ export function academySummary() {
   return {
     name: academy.academy as string,
     version: academy.version as number,
-    courses: courses.length,
+    courses: SOURCE.length,
     modules,
     lessons,
     videos,
@@ -106,7 +113,6 @@ function assignmentKind(raw: string): AcademyAssignmentKind {
 
 export async function importAcademy(): Promise<ImportResult> {
   const admin = createAdminClient();
-  const courses = academy.courses as unknown as SourceCourse[];
   const result: ImportResult = {
     courses: { inserted: 0, updated: 0 },
     modules: 0,
@@ -116,14 +122,25 @@ export async function importAcademy(): Promise<ImportResult> {
     errors: [],
   };
 
-  const existing = await fetchAllRows<{ id: string; slug: string }>((from, to) =>
-    admin.from("academy_courses").select("id, slug").range(from, to)
-  );
-  const courseIdBySlug = new Map(existing.map((c) => [c.slug, c.id]));
+  // Validate the whole file before writing any of it. A bad assignment kind in
+  // the twentieth course should not leave nineteen imported and the rest not.
+  for (const c of SOURCE) {
+    for (const m of c.modules) {
+      if (m.assignment) assignmentKind(m.assignment.kind);
+    }
+  }
 
-  for (const c of courses) {
-    try {
-      const row = {
+  // ---- courses -------------------------------------------------------------
+  const before = await fetchAllRows<{ slug: string }>((from, to) =>
+    admin.from("academy_courses").select("slug").range(from, to)
+  );
+  const knownSlugs = new Set(before.map((c) => c.slug));
+  const now = new Date().toISOString();
+
+  const { data: savedCourses, error: courseError } = await admin
+    .from("academy_courses")
+    .upsert(
+      SOURCE.map((c) => ({
         slug: c.slug,
         position: c.position,
         title: c.title,
@@ -137,147 +154,183 @@ export async function importAcademy(): Promise<ImportResult> {
         tools: c.tools ?? {},
         cover_path: c.cover ?? null,
         is_published: true,
-        updated_at: new Date().toISOString(),
-      };
+        updated_at: now,
+      })),
+      { onConflict: "slug" }
+    )
+    .select("id, slug");
+  if (courseError) throw new Error(`courses: ${courseError.message}`);
 
-      const known = courseIdBySlug.get(c.slug);
-      let courseId: string;
-      if (known) {
-        const { error } = await admin.from("academy_courses").update(row).eq("id", known);
-        if (error) throw new Error(error.message);
-        courseId = known;
-        result.courses.updated += 1;
-      } else {
-        const { data, error } = await admin
-          .from("academy_courses")
-          .insert(row)
-          .select("id")
-          .single();
-        if (error || !data) throw new Error(error?.message ?? "insert returned no row");
-        courseId = data.id;
-        result.courses.inserted += 1;
-      }
-
-      await importModules(admin, courseId, c, result);
-    } catch (e) {
-      result.errors.push(`${c.slug}: ${e instanceof Error ? e.message : String(e)}`);
+  const courseIdBySlug = new Map((savedCourses ?? []).map((c) => [c.slug, c.id]));
+  for (const c of SOURCE) {
+    if (!courseIdBySlug.has(c.slug)) {
+      result.errors.push(`${c.slug}: the database did not return an id`);
+      continue;
     }
+    if (knownSlugs.has(c.slug)) result.courses.updated += 1;
+    else result.courses.inserted += 1;
   }
 
+  const courseIds = [...courseIdBySlug.values()];
+  if (courseIds.length === 0) return result;
+
+  // ---- modules -------------------------------------------------------------
+  const moduleRows = SOURCE.flatMap((c) => {
+    const courseId = courseIdBySlug.get(c.slug);
+    if (!courseId) return [];
+    return c.modules.map((m) => ({
+      course_id: courseId,
+      position: m.position,
+      title: m.title,
+      goal: m.goal ?? null,
+    }));
+  });
+
+  const { data: savedModules, error: moduleError } = await admin
+    .from("academy_modules")
+    .upsert(moduleRows, { onConflict: "course_id,position" })
+    .select("id, course_id, position");
+  if (moduleError) throw new Error(`modules: ${moduleError.message}`);
+  result.modules = savedModules?.length ?? 0;
+
+  const moduleId = new Map(
+    (savedModules ?? []).map((m) => [`${m.course_id}:${m.position}`, m.id])
+  );
+
+  // ---- lessons -------------------------------------------------------------
+  // Built here rather than worked out again later: this loop already knows
+  // which module id each lesson belongs to and which positions the file lists.
+  const wanted: WantedContent = {
+    moduleIds: new Set(moduleId.values()),
+    lessonPositions: new Map(),
+    withoutAssignment: [],
+  };
+
+  const lessonRows = SOURCE.flatMap((c) => {
+    const courseId = courseIdBySlug.get(c.slug);
+    if (!courseId) return [];
+    return c.modules.flatMap((m) => {
+      const mid = moduleId.get(`${courseId}:${m.position}`);
+      if (!mid) return [];
+      wanted.lessonPositions.set(mid, new Set(m.lessons.map((l) => l.position)));
+      if (!m.assignment) wanted.withoutAssignment.push(mid);
+      return m.lessons.map((l) => ({
+        module_id: mid,
+        position: l.position,
+        title: l.title,
+        summary: l.summary ?? null,
+        practical: l.practical ?? false,
+        search_query: l.search_query ?? null,
+        videos: l.videos ?? {},
+      }));
+    });
+  });
+
+  const { data: savedLessons, error: lessonError } = await admin
+    .from("academy_lessons")
+    .upsert(lessonRows, { onConflict: "module_id,position" })
+    .select("id");
+  if (lessonError) throw new Error(`lessons: ${lessonError.message}`);
+  result.lessons = savedLessons?.length ?? 0;
+
+  // ---- assignments ---------------------------------------------------------
+  const assignmentRows = SOURCE.flatMap((c) => {
+    const courseId = courseIdBySlug.get(c.slug);
+    if (!courseId) return [];
+    return c.modules.flatMap((m) => {
+      const mid = moduleId.get(`${courseId}:${m.position}`);
+      if (!mid || !m.assignment) return [];
+      return [
+        {
+          module_id: mid,
+          kind: assignmentKind(m.assignment.kind),
+          title: m.assignment.title,
+          instructions: m.assignment.instructions,
+          checklist: m.assignment.checklist ?? [],
+        },
+      ];
+    });
+  });
+
+  const { data: savedAssignments, error: assignmentError } = await admin
+    .from("academy_assignments")
+    .upsert(assignmentRows, { onConflict: "module_id" })
+    .select("id");
+  if (assignmentError) throw new Error(`assignments: ${assignmentError.message}`);
+  result.assignments = savedAssignments?.length ?? 0;
+
+  await removeStale(admin, courseIds, wanted, result);
   return result;
 }
 
-async function importModules(
+/** What the file says each surviving module should contain. */
+interface WantedContent {
+  /** Module ids this import wrote, so anything else under these courses is stale. */
+  moduleIds: Set<string>;
+  /** Lesson positions the file still lists, per module id. */
+  lessonPositions: Map<string, Set<number>>;
+  /** Module ids the file gives no assignment. */
+  withoutAssignment: string[];
+}
+
+/**
+ * Takes out content that has gone from the file.
+ *
+ * Only ever rows under the courses this import just wrote, so a course someone
+ * added by hand in the dashboard is left alone rather than treated as stale.
+ */
+async function removeStale(
   admin: ReturnType<typeof createAdminClient>,
-  courseId: string,
-  course: SourceCourse,
+  courseIds: string[],
+  wanted: WantedContent,
   result: ImportResult
 ) {
-  const existingModules = await fetchAllRows<{ id: string; position: number }>((from, to) =>
-    admin.from("academy_modules").select("id, position").eq("course_id", courseId).range(from, to)
+  const existingModules = await fetchAllRows<{ id: string }>((from, to) =>
+    admin.from("academy_modules").select("id").in("course_id", courseIds).range(from, to)
   );
-  const moduleIdByPosition = new Map(existingModules.map((m) => [m.position, m.id]));
-
-  for (const m of course.modules) {
-    const row = { course_id: courseId, position: m.position, title: m.title, goal: m.goal ?? null };
-    let moduleId = moduleIdByPosition.get(m.position);
-    if (moduleId) {
-      const { error } = await admin.from("academy_modules").update(row).eq("id", moduleId);
-      if (error) throw new Error(`module ${m.position}: ${error.message}`);
-    } else {
-      const { data, error } = await admin
-        .from("academy_modules")
-        .insert(row)
-        .select("id")
-        .single();
-      if (error || !data) throw new Error(`module ${m.position}: ${error?.message ?? "no row"}`);
-      moduleId = data.id;
-    }
-    result.modules += 1;
-
-    await importLessons(admin, moduleId, m, result);
-    await importAssignment(admin, moduleId, m, result);
-  }
-
-  // A module that has gone from the file goes from the database, taking its
-  // lessons and assignment with it by cascade.
-  const wanted = new Set(course.modules.map((m) => m.position));
-  const stale = existingModules.filter((m) => !wanted.has(m.position)).map((m) => m.id);
-  if (stale.length > 0) {
-    const { error } = await admin.from("academy_modules").delete().in("id", stale);
+  const staleModules = existingModules
+    .filter((m) => !wanted.moduleIds.has(m.id))
+    .map((m) => m.id);
+  if (staleModules.length > 0) {
+    // Lessons and that module's assignment go with it by cascade.
+    const { error } = await admin.from("academy_modules").delete().in("id", staleModules);
     if (error) throw new Error(`removing modules: ${error.message}`);
-    result.removed.modules += stale.length;
+    result.removed.modules += staleModules.length;
   }
-}
 
-async function importLessons(
-  admin: ReturnType<typeof createAdminClient>,
-  moduleId: string,
-  m: SourceModule,
-  result: ImportResult
-) {
-  const existing = await fetchAllRows<{ id: string; position: number }>((from, to) =>
-    admin.from("academy_lessons").select("id, position").eq("module_id", moduleId).range(from, to)
+  const liveModuleIds = [...wanted.moduleIds];
+  if (liveModuleIds.length === 0) return;
+
+  // A lesson whose position is no longer in the file: the module stays, the
+  // lesson does not.
+  const existingLessons = await fetchAllRows<{
+    id: string;
+    module_id: string;
+    position: number;
+  }>((from, to) =>
+    admin
+      .from("academy_lessons")
+      .select("id, module_id, position")
+      .in("module_id", liveModuleIds)
+      .range(from, to)
   );
-  const byPosition = new Map(existing.map((l) => [l.position, l.id]));
-
-  for (const l of m.lessons) {
-    const row = {
-      module_id: moduleId,
-      position: l.position,
-      title: l.title,
-      summary: l.summary ?? null,
-      practical: l.practical ?? false,
-      search_query: l.search_query ?? null,
-      videos: l.videos ?? {},
-    };
-    const known = byPosition.get(l.position);
-    const { error } = known
-      ? await admin.from("academy_lessons").update(row).eq("id", known)
-      : await admin.from("academy_lessons").insert(row);
-    if (error) throw new Error(`lesson ${m.position}.${l.position}: ${error.message}`);
-    result.lessons += 1;
-  }
-
-  const wanted = new Set(m.lessons.map((l) => l.position));
-  const stale = existing.filter((l) => !wanted.has(l.position)).map((l) => l.id);
-  if (stale.length > 0) {
-    const { error } = await admin.from("academy_lessons").delete().in("id", stale);
+  const staleLessons = existingLessons
+    .filter((l) => !wanted.lessonPositions.get(l.module_id)?.has(l.position))
+    .map((l) => l.id);
+  if (staleLessons.length > 0) {
+    const { error } = await admin.from("academy_lessons").delete().in("id", staleLessons);
     if (error) throw new Error(`removing lessons: ${error.message}`);
-    result.removed.lessons += stale.length;
-  }
-}
-
-async function importAssignment(
-  admin: ReturnType<typeof createAdminClient>,
-  moduleId: string,
-  m: SourceModule,
-  result: ImportResult
-) {
-  const { data: existing } = await admin
-    .from("academy_assignments")
-    .select("id")
-    .eq("module_id", moduleId)
-    .maybeSingle();
-
-  if (!m.assignment) {
-    if (existing) {
-      await admin.from("academy_assignments").delete().eq("id", existing.id);
-      result.removed.assignments += 1;
-    }
-    return;
+    result.removed.lessons += staleLessons.length;
   }
 
-  const row = {
-    module_id: moduleId,
-    kind: assignmentKind(m.assignment.kind),
-    title: m.assignment.title,
-    instructions: m.assignment.instructions,
-    checklist: m.assignment.checklist ?? [],
-  };
-  const { error } = existing
-    ? await admin.from("academy_assignments").update(row).eq("id", existing.id)
-    : await admin.from("academy_assignments").insert(row);
-  if (error) throw new Error(`assignment ${m.position}: ${error.message}`);
-  result.assignments += 1;
+  // An assignment on a module the file no longer gives one.
+  if (wanted.withoutAssignment.length > 0) {
+    const { data, error } = await admin
+      .from("academy_assignments")
+      .delete()
+      .in("module_id", wanted.withoutAssignment)
+      .select("id");
+    if (error) throw new Error(`removing assignments: ${error.message}`);
+    result.removed.assignments += data?.length ?? 0;
+  }
 }

@@ -10,6 +10,13 @@ import { AdminNav } from "@/components/app/admin-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ImportButton } from "./import-button";
 
+/**
+ * The import writes 462 rows. It does that in seven requests, well inside the
+ * default limit, but this leaves room for a slow day rather than killing the
+ * run half way through and leaving the content half written.
+ */
+export const maxDuration = 60;
+
 export default async function AdminAcademyPage() {
   const session = await getSessionRoles();
   if (!session) return null;
