@@ -1,5 +1,25 @@
 -- ============================================================================
---  04_remove_not_on_list.sql  —  THIS CHANGES DATA.
+--  04_remove_not_on_list.sql  —  SUPERSEDED. DO NOT RUN.
+-- ============================================================================
+--  The department has decided that NOBODY is removed from the website. This
+--  script does the opposite, so it refuses to run: it is kept only as the
+--  record of what was done, and because 06_undo.sql and the Members list page
+--  describe undoing it.
+--
+--  To undo it, open Admin -> Members list and press "Restore everyone". That
+--  lifts all three locks — the roster status, the access flag and the Supabase
+--  sign-in ban — where this file's SQL could only reach the first two.
+--
+--  If the decision ever changes back, delete the guard below deliberately.
+-- ============================================================================
+
+do $$
+begin
+  raise exception 'Superseded: the department does not remove anyone. Use Admin -> Members list -> Restore everyone.';
+end $$;
+
+-- ============================================================================
+--  Everything below is the original script, left for the record.
 -- ============================================================================
 --  Run 00_helpers.sql first, and read 03_preview.sql output before this.
 --

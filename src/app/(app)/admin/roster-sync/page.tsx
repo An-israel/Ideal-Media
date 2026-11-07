@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/app/page-header";
 import { MigrationNotice } from "@/components/app/migration-notice";
 import { memberAccessMigrations } from "@/lib/schema-check";
 import { RosterSyncFlow } from "./roster-sync-flow";
+import { RestorePanel } from "./restore-panel";
 
 export default async function RosterSyncPage() {
   const session = await getSessionRoles();
@@ -56,6 +57,7 @@ export default async function RosterSyncPage() {
           reason: r.access_revoked_reason,
         }))}
       />
+      <RestorePanel revokedCount={revoked.length} />
     </div>
   );
 }

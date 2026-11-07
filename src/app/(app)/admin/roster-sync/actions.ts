@@ -8,6 +8,13 @@ import { PAGE_SIZE } from "@/lib/constants";
 import { parseMemberList, type ListedMember } from "@/lib/member-list";
 import { reconcileRoster, type ExistingAccount, type RosterPlan } from "@/lib/roster-sync";
 import { createUnclaimedMember } from "@/lib/member-admin";
+import {
+  findRosterGap,
+  type AccountLike,
+  type MissingPerson,
+  type SheetData,
+} from "@/lib/roster-restore";
+import memberSheets from "@/data/member-sheets.json";
 
 /**
  * Reconciling the site against the official media members list.
@@ -233,4 +240,188 @@ export async function restoreAccess(userId: string): Promise<ApplyResult> {
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not restore access." };
   }
+}
+
+// ============================================================================
+//  Putting the department back together
+// ============================================================================
+//  The removal pass judged people against the 101-name members list, which
+//  turned out to be narrower than the department actually is: the subunit
+//  sheets name people who are not on it, and the department's decision is that
+//  nobody is removed. These two actions are the reversal — restore everyone,
+//  and create the people who were written on a sheet but never had an account.
+
+export interface RestoreEveryoneResult {
+  ok: boolean;
+  error?: string;
+  /** Had their access revocation cleared. */
+  unrevoked?: number;
+  /** Had member_status 'left' set back to active. */
+  reactivated?: number;
+  /** Had their Supabase sign-in ban lifted. */
+  unbanned?: number;
+  failures?: string[];
+}
+
+/**
+ * Puts every removed member back.
+ *
+ * Three locks were used to remove someone and all three have to come off, which
+ * is why this is an action and not another SQL script: the profile flag and
+ * member_status are rows, but the sign-in ban lives in Supabase's auth schema
+ * and is only liftable through the admin API.
+ *
+ * Nothing here is destructive and it is safe to run twice.
+ */
+export async function restoreEveryone(): Promise<RestoreEveryoneResult> {
+  try {
+    await requireSuperAdmin();
+    const admin = createAdminClient();
+    const failures: string[] = [];
+
+    const revoked = await fetchAllRows<{ id: string }>((from, to) =>
+      admin.from("profiles").select("id").not("access_revoked_at", "is", null).range(from, to)
+    );
+    const left = await fetchAllRows<{ id: string }>((from, to) =>
+      admin.from("profiles").select("id").eq("member_status", "left").range(from, to)
+    );
+
+    let unrevoked = 0;
+    for (const batch of chunk(revoked.map((r) => r.id), PAGE_SIZE)) {
+      const { error } = await admin
+        .from("profiles")
+        .update({ access_revoked_at: null, access_revoked_by: null, access_revoked_reason: null })
+        .in("id", batch);
+      if (error) return { ok: false, error: error.message };
+      unrevoked += batch.length;
+    }
+
+    let reactivated = 0;
+    for (const batch of chunk(left.map((r) => r.id), PAGE_SIZE)) {
+      const { error } = await admin
+        .from("profiles")
+        .update({ member_status: "active" })
+        .in("id", batch);
+      if (error) return { ok: false, error: error.message };
+      reactivated += batch.length;
+    }
+
+    // Lift the sign-in ban for everyone who had one. Only accounts revoked
+    // through this page were ever banned — the SQL scripts could not do it —
+    // so this is the set above, and asking for an unban that was never applied
+    // is harmless.
+    let unbanned = 0;
+    for (const { id } of revoked) {
+      const { error } = await admin.auth.admin.updateUserById(id, { ban_duration: "none" });
+      if (error) failures.push(`Could not restore sign-in for ${id}: ${error.message}`);
+      else unbanned += 1;
+    }
+
+    revalidatePath("/admin/roster-sync");
+    revalidatePath("/secretary/roster");
+    revalidatePath("/attendance");
+    revalidatePath("/academy", "layout");
+    return { ok: true, unrevoked, reactivated, unbanned, failures };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not restore access." };
+  }
+}
+
+export interface MissingResult {
+  ok: boolean;
+  error?: string;
+  missing?: MissingPerson[];
+  present?: number;
+  total?: number;
+}
+
+/** Who the department has written down but the site has no account for. */
+export async function previewMissingMembers(): Promise<MissingResult> {
+  try {
+    await requireSuperAdmin();
+    const accounts = await loadAccounts();
+    const gap = findRosterGap(memberSheets as SheetData, accounts.map(toAccountLike));
+    return { ok: true, missing: gap.missing, present: gap.present, total: gap.total };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not work that out." };
+  }
+}
+
+export interface CreateMissingResult {
+  ok: boolean;
+  error?: string;
+  created?: number;
+  skipped?: number;
+  failures?: string[];
+}
+
+/**
+ * Creates an account for everyone named on a list who has none.
+ *
+ * Takes the names it was shown rather than recomputing them, for the same
+ * reason the reconcile flow does: what happens must be what was approved.
+ * Each name is re-checked against the site as it is created, so a person who
+ * appeared twice, or who was created a moment ago, is skipped rather than
+ * duplicated.
+ */
+export async function createMissingMembers(
+  people: { name: string; phone: string | null }[]
+): Promise<CreateMissingResult> {
+  try {
+    await requireSuperAdmin();
+    const failures: string[] = [];
+    let created = 0;
+    let skipped = 0;
+
+    for (const person of people) {
+      const name = person.name.trim();
+      if (!name) continue;
+
+      // Re-check against the live site, not the list this started from.
+      const accounts = await loadAccounts();
+      const gap = findRosterGap(
+        {
+          officialList: [{ name, phone: person.phone }],
+          sheets: [],
+          aliases: (memberSheets as SheetData).aliases,
+        },
+        accounts.map(toAccountLike)
+      );
+      if (gap.missing.length === 0) {
+        skipped += 1;
+        continue;
+      }
+
+      try {
+        await createUnclaimedMember({
+          fullName: name,
+          email: "",
+          phone: person.phone ?? "",
+          whatsappNumber: person.phone ?? "",
+          // No subunit: they show up in the report's "nobody reports on them"
+          // list until the department assigns one, so they cannot be forgotten.
+          origin: "secretary",
+        });
+        created += 1;
+      } catch (e) {
+        failures.push(`${name}: ${e instanceof Error ? e.message : "could not be created"}`);
+      }
+    }
+
+    revalidatePath("/admin/roster-sync");
+    revalidatePath("/secretary/roster");
+    revalidatePath("/attendance");
+    return { ok: true, created, skipped, failures };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not create them." };
+  }
+}
+
+function toAccountLike(a: ExistingAccount): AccountLike {
+  return {
+    id: a.id,
+    fullName: a.fullName,
+    phone: a.phone,
+    whatsappNumber: a.whatsappNumber,
+  };
 }

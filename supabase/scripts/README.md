@@ -11,7 +11,7 @@ click **Run**, in this order. Scripts 1 and 4 change nothing on their own.
 | `01_find_duplicates.sql` | **no** | Two accounts for one person. Fix these first or every total is wrong. |
 | `02_fix_phones.sql` | yes | Corrects seven wrong numbers. Do this early — the phone is the key everything else matches on. |
 | `03_preview.sql` | **no** | Counts, and the exact list of who would be removed. **Read this before 04.** |
-| `04_remove_not_on_list.sql` | yes | Marks everyone not on the 101-name list as `left`. |
+| `04_remove_not_on_list.sql` | **superseded** | Removed everyone not on the 101-name list. It now refuses to run — see below. |
 | `05_assign_subunits.sql` | yes | Replaces each unit's membership with its sheet. |
 | `07_keep_subunit_people.sql` | yes | Puts back anyone a subunit sheet lists, and names who still has no account. |
 | `08_social_media.sql` | yes | Social Media on its own: puts its people back and makes them primary members. Complete in itself; run it after `00`. |
@@ -20,16 +20,37 @@ click **Run**, in this order. Scripts 1 and 4 change nothing on their own.
 
 ## The rule, as the department states it
 
-> Keep anyone who is on the official members list **OR** on any subunit sheet.
-> Remove only the people on **neither**.
+> Nobody is removed from the website.
 
-`04` judges on the members list alone, so it removes some current subunit
-members. `07` puts them back. Run `04`, then `07`, then `05`.
+This replaces the earlier rule, which was "keep anyone on the official members
+list **or** on a subunit sheet, remove the rest" — and before that, "no more
+than the 101 on the list". Each round found more people who belonged, so the
+department settled it: everybody stays.
 
-`07` also lists the sheet names with no account at all. Create those from the
-app — **Admin → Members list**, pasting `combined-members-list.txt` — rather
-than by SQL, so the login is created properly through Supabase's own API.
-Then re-run `05_assign_subunits.sql`.
+**`04_remove_not_on_list.sql` therefore refuses to run.** It is kept as the
+record of what was done, with a guard at the top that raises an error.
+
+To undo what it did, open **Admin → Members list** and press **Restore
+everyone**. Removal used three independent locks — the roster status, the
+access flag, and a Supabase sign-in ban — and only the first two are reachable
+from the SQL editor; the ban is in the auth schema and comes off through the
+admin API. So the button, not a script.
+
+The same page has **People with no account yet**, which checks the members list
+and all six subunit sheets against the site and offers to create anyone who is
+written down but missing. It matches the way the assignment scripts do — a
+confirmed spelling pair, then phone number, then name, with the same-words and
+shortened-name rules — so somebody already here under another spelling is not
+created twice.
+
+`07` also lists the sheet names with no account at all. Those are now handled
+by **Admin → Members list → People with no account yet**, which creates them
+through Supabase's own API so the login works, rather than by SQL. Run
+`05_assign_subunits.sql` afterwards to put the new accounts in their subunits.
+
+Across the members list and the six sheets the department has written down
+**137 distinct people** — 241 entries, because most appear on more than one
+list, under more than one spelling.
 
 ## Social Media and Technical arrived later
 

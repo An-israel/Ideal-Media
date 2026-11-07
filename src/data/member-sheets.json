@@ -1,0 +1,1057 @@
+{
+  "note": "Extracted from supabase/scripts/05_assign_subunits.sql and 03_preview.sql, which remain the source of truth for the SQL path.",
+  "officialList": [
+    {
+      "name": "Agbo Amarachi Emmanuella",
+      "phone": "9022035639"
+    },
+    {
+      "name": "Agu Chibueze Alex",
+      "phone": "8136821764"
+    },
+    {
+      "name": "Aja-Aki Chioma Nwannediya",
+      "phone": "9165407939"
+    },
+    {
+      "name": "Alozie Benita",
+      "phone": "9078102805"
+    },
+    {
+      "name": "Aniekan Israel",
+      "phone": "7048083756"
+    },
+    {
+      "name": "Chidube Kamtochukwu Blossom",
+      "phone": "9137499839"
+    },
+    {
+      "name": "Chika Chukwuelokalum Benedict",
+      "phone": "7088980666"
+    },
+    {
+      "name": "CHIMA JASPER",
+      "phone": "9060432830"
+    },
+    {
+      "name": "Chisom Precious",
+      "phone": "9018678849"
+    },
+    {
+      "name": "Ejinkonye Dennis Chimzalum",
+      "phone": "7031179931"
+    },
+    {
+      "name": "Emeka Goodness Nzubechi",
+      "phone": "7065829586"
+    },
+    {
+      "name": "Esther Emmanuel",
+      "phone": "8076877763"
+    },
+    {
+      "name": "Ezedinachi Emmanuel Chidubem",
+      "phone": "1806973270"
+    },
+    {
+      "name": "Ezeora Evangel Oluomachi",
+      "phone": "9018149235"
+    },
+    {
+      "name": "Ibeabuchi Adanna",
+      "phone": "7068960169"
+    },
+    {
+      "name": "Igolo Divine Chiziterem",
+      "phone": "8144764504"
+    },
+    {
+      "name": "Ikeme Ebubechukwu Daniel",
+      "phone": "7048457380"
+    },
+    {
+      "name": "Izuegbulam Chinwe Blessing",
+      "phone": "9130376636"
+    },
+    {
+      "name": "Jibulu Nmesoma Goodness",
+      "phone": "9045391548"
+    },
+    {
+      "name": "Joshua Chibuenyim",
+      "phone": "9068068385"
+    },
+    {
+      "name": "Kalu Victoria",
+      "phone": "9153203880"
+    },
+    {
+      "name": "Madukasi Godswill Ebubechukwu",
+      "phone": "7069449149"
+    },
+    {
+      "name": "Mameme Obinna God'swill",
+      "phone": "8024629884"
+    },
+    {
+      "name": "NDUDUM CHIDIMMA MIRACLE",
+      "phone": "9131422290"
+    },
+    {
+      "name": "Nnam Ifeoma",
+      "phone": "8086478211"
+    },
+    {
+      "name": "Nwachukwu Favour Obinna",
+      "phone": "9018717034"
+    },
+    {
+      "name": "Nwaigwe Samuel",
+      "phone": "7044205365"
+    },
+    {
+      "name": "Nwani Chinaza Loveth",
+      "phone": "8128952543"
+    },
+    {
+      "name": "Offor Akachi",
+      "phone": "9162477061"
+    },
+    {
+      "name": "OGBONNA PRECIOUS CHUKWUASOKAM",
+      "phone": "8155113431"
+    },
+    {
+      "name": "Okafor Somtochukwu",
+      "phone": "9015589563"
+    },
+    {
+      "name": "Okechukwu Precious Chidera",
+      "phone": "7047146684"
+    },
+    {
+      "name": "Okereke Nzubechukwu Goodness",
+      "phone": "8117828223"
+    },
+    {
+      "name": "Okoroafor Iheoma Precious",
+      "phone": "9040462455"
+    },
+    {
+      "name": "Opara Chidumebi Elisheva",
+      "phone": "7075061412"
+    },
+    {
+      "name": "Oriaku Chidera",
+      "phone": "7043908371"
+    },
+    {
+      "name": "ORJI PAMELA MMERICHUKWU",
+      "phone": "7061669987"
+    },
+    {
+      "name": "Owan Flourish Worma",
+      "phone": "9160781869"
+    },
+    {
+      "name": "Peter Nathaniel",
+      "phone": "7087135592"
+    },
+    {
+      "name": "Success Eziashi Ebubechukwu",
+      "phone": "8101261442"
+    },
+    {
+      "name": "Udeoma Chidera",
+      "phone": "9032055636"
+    },
+    {
+      "name": "Ugochukwu Christopher Kosisochukwu",
+      "phone": "9035504313"
+    },
+    {
+      "name": "Uzoechi Deborah Chiamaka",
+      "phone": "8112288230"
+    },
+    {
+      "name": "Ezenwa Chukwubueze Emmanuel",
+      "phone": "8023813695"
+    },
+    {
+      "name": "Jennifer Joseph",
+      "phone": "9066436106"
+    },
+    {
+      "name": "Eze Miracle Oluchi",
+      "phone": null
+    },
+    {
+      "name": "Ani Chisom Miracle",
+      "phone": "8100318827"
+    },
+    {
+      "name": "Anidobe Godswill",
+      "phone": "9015498900"
+    },
+    {
+      "name": "Chidiebere Success Ugochukwu",
+      "phone": "9119229230"
+    },
+    {
+      "name": "Chinanu Favour Nmesoma",
+      "phone": "9136122587"
+    },
+    {
+      "name": "Chinedu Chidumebi",
+      "phone": "9167975892"
+    },
+    {
+      "name": "Egbe Joshua Oregbe",
+      "phone": "8082400540"
+    },
+    {
+      "name": "Henry Nwankwo",
+      "phone": "7032736919"
+    },
+    {
+      "name": "Owan Flourish",
+      "phone": null
+    },
+    {
+      "name": "Ikechukwu Success Chidubem",
+      "phone": "8064458872"
+    },
+    {
+      "name": "Nwabogwu Precious",
+      "phone": null
+    },
+    {
+      "name": "Nnamani Emmanuel Chidera",
+      "phone": "7072111293"
+    },
+    {
+      "name": "Nwachukwu Chibueze",
+      "phone": "8146359618"
+    },
+    {
+      "name": "Godwin Favour",
+      "phone": null
+    },
+    {
+      "name": "Victoria Omekaodinma",
+      "phone": null
+    },
+    {
+      "name": "Nwokolo Kamsiyochukwu Philip",
+      "phone": "9034420395"
+    },
+    {
+      "name": "Nwonyia Chiemelie",
+      "phone": "8030443678"
+    },
+    {
+      "name": "Nworie Nneoma",
+      "phone": "8062805318"
+    },
+    {
+      "name": "Okechukwu Chidimma",
+      "phone": "7080598886"
+    },
+    {
+      "name": "OKOH CHIMDINDU SOPHIE",
+      "phone": "8076772318"
+    },
+    {
+      "name": "ONYEMA BENEDICTA EZINNE",
+      "phone": "9117365805"
+    },
+    {
+      "name": "Osuji Miracle Amarachukwu",
+      "phone": "9025508510"
+    },
+    {
+      "name": "Sunday Chinemerem Emmanuel",
+      "phone": "8106313516"
+    },
+    {
+      "name": "Uchenna Divine Chisom",
+      "phone": "7071145821"
+    },
+    {
+      "name": "Udokwu Harry Ebube",
+      "phone": "9160570525"
+    },
+    {
+      "name": "Igattah Victor",
+      "phone": null
+    },
+    {
+      "name": "Majesty Gift Chijindu",
+      "phone": "7075221762"
+    },
+    {
+      "name": "Ezenwosu Chioma Vanessa",
+      "phone": "8135188825"
+    },
+    {
+      "name": "Prevail Ugonna Peter",
+      "phone": "9114125622"
+    },
+    {
+      "name": "Victor Sam",
+      "phone": null
+    },
+    {
+      "name": "ISUELU PRAISE",
+      "phone": "7078771457"
+    },
+    {
+      "name": "Onwe Ogechukwu",
+      "phone": "9065316872"
+    },
+    {
+      "name": "Eze Chidiebube Ihuoma",
+      "phone": "9071213403"
+    },
+    {
+      "name": "Onuh Godsgoodness Ikedi",
+      "phone": "9023699384"
+    },
+    {
+      "name": "Perfection Reward",
+      "phone": "2348123320439"
+    },
+    {
+      "name": "Onwukeme Zara",
+      "phone": "8146450684"
+    },
+    {
+      "name": "Metu Amarachim",
+      "phone": "8060283236"
+    },
+    {
+      "name": "Ubakibie Rhema",
+      "phone": "8166364341"
+    },
+    {
+      "name": "Ikebude Melvin Chinaemelem",
+      "phone": "8103715458"
+    },
+    {
+      "name": "Agu Vitalis Chukwuemerie",
+      "phone": "7016639391"
+    },
+    {
+      "name": "Ndubueze Chinenyenwa Victory",
+      "phone": "8166901443"
+    },
+    {
+      "name": "Aniobi Smiles",
+      "phone": "8152878749"
+    },
+    {
+      "name": "Abanokwu Bethel Chielotam",
+      "phone": "2349123060528"
+    },
+    {
+      "name": "Iniwoke Joy Ogheneyole",
+      "phone": "8164200437"
+    },
+    {
+      "name": "Onoh Charles",
+      "phone": "8101115730"
+    },
+    {
+      "name": "Goodness Chukwuajah",
+      "phone": "7041752149"
+    },
+    {
+      "name": "Sunday Divine Edache",
+      "phone": "8112175408"
+    },
+    {
+      "name": "Ezeamatu Chigozirim Gift",
+      "phone": "7012739748"
+    },
+    {
+      "name": "Ikechukwu Goodness Chiamaka",
+      "phone": "8061928057"
+    },
+    {
+      "name": "David-Onuoha Mmesoma Milagro",
+      "phone": "9060694909"
+    },
+    {
+      "name": "Orji Chiugo",
+      "phone": "7032689219"
+    },
+    {
+      "name": "Aliozor Lilian Chinenyenwa",
+      "phone": "8103210416"
+    },
+    {
+      "name": "Akandu Oluchukwu Ifunanya",
+      "phone": "8112586355"
+    },
+    {
+      "name": "CHIMA GLORY CHISOM",
+      "phone": "7047484153"
+    },
+    {
+      "name": "Austin-Nwaroh Ogechukwu Precious",
+      "phone": "8087332771"
+    },
+    {
+      "name": "Ezechi Chinwe",
+      "phone": null
+    }
+  ],
+  "sheets": [
+    {
+      "unit": "Production",
+      "membership": "primary",
+      "members": [
+        {
+          "name": "Nwokolo Kamsiyochukwu Philip",
+          "phone": "09034420395"
+        },
+        {
+          "name": "Madukasi Godswill",
+          "phone": "07069449149"
+        },
+        {
+          "name": "Chinanu Nmesoma Favour",
+          "phone": "09136122587"
+        },
+        {
+          "name": "Ohiero Favour",
+          "phone": "08084816728"
+        },
+        {
+          "name": "Agbo Amarachi Grace",
+          "phone": "07049709807"
+        },
+        {
+          "name": "Chima Jasper",
+          "phone": "09060432830"
+        },
+        {
+          "name": "Agu Chibueze Alex",
+          "phone": "08136821764"
+        },
+        {
+          "name": "Onuh Godsgoodness Ikedi",
+          "phone": "09023699384"
+        },
+        {
+          "name": "Austin Precious",
+          "phone": "08087332771"
+        },
+        {
+          "name": "Joshua victor",
+          "phone": "09161356392"
+        },
+        {
+          "name": "Ejinkonye Dennis",
+          "phone": "07031179931"
+        },
+        {
+          "name": "Alioze Benita Zoe",
+          "phone": "09078102805"
+        },
+        {
+          "name": "Ezedinachi Emmanuel",
+          "phone": "08106973270"
+        },
+        {
+          "name": "Abugu Philip",
+          "phone": "09139930882"
+        },
+        {
+          "name": "Owan Flourish",
+          "phone": "09049146306"
+        },
+        {
+          "name": "Uche",
+          "phone": null
+        },
+        {
+          "name": "Akachukwu",
+          "phone": "09041455715"
+        },
+        {
+          "name": "Kosi",
+          "phone": "08117478722"
+        },
+        {
+          "name": "Emmanuel",
+          "phone": "07037526787"
+        },
+        {
+          "name": "Prince",
+          "phone": "08133811815"
+        }
+      ]
+    },
+    {
+      "unit": "Photography",
+      "membership": "primary",
+      "members": [
+        {
+          "name": "chinenyenwa victory",
+          "phone": "8166901443"
+        },
+        {
+          "name": "Orji Chiugo Sombodi",
+          "phone": "7032680219"
+        },
+        {
+          "name": "Sunday Emmanuel",
+          "phone": "9112424977"
+        },
+        {
+          "name": "victor sam",
+          "phone": "9162645815"
+        },
+        {
+          "name": "Christian Okonkwo",
+          "phone": "9011532264"
+        },
+        {
+          "name": "Igolo Divine Chiziterem",
+          "phone": "8144764504"
+        },
+        {
+          "name": "Ikeme Ebube Daniel",
+          "phone": "7048457380"
+        },
+        {
+          "name": "OGBONNA Precious C.",
+          "phone": "8155113431"
+        },
+        {
+          "name": "Emeka Goodness Nzubechi",
+          "phone": "7048869525"
+        },
+        {
+          "name": "Henry Nwankwo",
+          "phone": "7032736919"
+        },
+        {
+          "name": "Jibulu Goodness",
+          "phone": "9045391548"
+        },
+        {
+          "name": "Obinna God's will",
+          "phone": "8024629884"
+        },
+        {
+          "name": "samuel",
+          "phone": "7072496518"
+        },
+        {
+          "name": "udokwu Harrison Ebube",
+          "phone": "9160570525"
+        },
+        {
+          "name": "Offor Akachi Patrick",
+          "phone": "9162477061"
+        },
+        {
+          "name": "Okoh Chimdindu Sophie",
+          "phone": "8076772318"
+        },
+        {
+          "name": "Moses",
+          "phone": "2347041118511"
+        },
+        {
+          "name": "Charles",
+          "phone": "8101115730"
+        },
+        {
+          "name": "Abundance",
+          "phone": "7066990490"
+        },
+        {
+          "name": "Victor",
+          "phone": "2347070294367"
+        },
+        {
+          "name": "Kenechukwu",
+          "phone": "2348050878887"
+        }
+      ]
+    },
+    {
+      "unit": "Projection",
+      "membership": "primary",
+      "members": [
+        {
+          "name": "Obichukwu Charis",
+          "phone": null
+        },
+        {
+          "name": "Obichukwu Splendour",
+          "phone": null
+        },
+        {
+          "name": "Godwin Favour Onyiyechi",
+          "phone": null
+        },
+        {
+          "name": "Kalu Victoria",
+          "phone": null
+        },
+        {
+          "name": "Okoroafor Iheoma Precious",
+          "phone": null
+        },
+        {
+          "name": "Esther Emmanuel",
+          "phone": null
+        },
+        {
+          "name": "Chidube Kamtochukwu Blossom",
+          "phone": null
+        },
+        {
+          "name": "Joseph Jennifer",
+          "phone": null
+        },
+        {
+          "name": "Ibeneme Precious Gozie",
+          "phone": null
+        },
+        {
+          "name": "Ndudim Miracle",
+          "phone": null
+        },
+        {
+          "name": "Opara Chidumebi",
+          "phone": null
+        },
+        {
+          "name": "God's Child Precious Munachiso",
+          "phone": null
+        },
+        {
+          "name": "Okoroafor Ogechukwu",
+          "phone": null
+        },
+        {
+          "name": "Osuji Miracle Amarachukwu",
+          "phone": null
+        },
+        {
+          "name": "Ani Chisom Miracle",
+          "phone": null
+        },
+        {
+          "name": "Nnamani Emmanuel Chidera",
+          "phone": null
+        },
+        {
+          "name": "Prevail Ugonna Peter",
+          "phone": null
+        },
+        {
+          "name": "Isuelu Praise Chidimma",
+          "phone": null
+        },
+        {
+          "name": "Iniwoke Joyce ogheneyole",
+          "phone": null
+        },
+        {
+          "name": "Onwe ogechukwu",
+          "phone": null
+        },
+        {
+          "name": "Majesty Gift Chijindu",
+          "phone": null
+        },
+        {
+          "name": "Akandu Oluchukwu Ifunanya",
+          "phone": null
+        },
+        {
+          "name": "Alex Chinoso",
+          "phone": null
+        },
+        {
+          "name": "Amarachi Igbana",
+          "phone": null
+        },
+        {
+          "name": "Nwachukwu Favour Obinna",
+          "phone": null
+        },
+        {
+          "name": "Udeoma Chidera Precious",
+          "phone": null
+        },
+        {
+          "name": "Aja-aki Chioma",
+          "phone": null
+        }
+      ]
+    },
+    {
+      "unit": "Video Editing",
+      "membership": "secondary",
+      "members": [
+        {
+          "name": "Ejinkonye Dennis",
+          "phone": null
+        },
+        {
+          "name": "Majesty Gift",
+          "phone": null
+        },
+        {
+          "name": "Aliozor Lilian",
+          "phone": null
+        },
+        {
+          "name": "Okoh Chimdindu",
+          "phone": null
+        },
+        {
+          "name": "Favour ohiero",
+          "phone": null
+        },
+        {
+          "name": "Kalu Victoria",
+          "phone": null
+        },
+        {
+          "name": "Isuelu Praise",
+          "phone": null
+        },
+        {
+          "name": "Agbo Grace A",
+          "phone": null
+        },
+        {
+          "name": "Success Eziashi",
+          "phone": null
+        },
+        {
+          "name": "Vanessa Chioma",
+          "phone": null
+        },
+        {
+          "name": "Philip Kamsi",
+          "phone": null
+        },
+        {
+          "name": "Goodness (Splendid)",
+          "phone": null
+        },
+        {
+          "name": "Ikeme Ebube",
+          "phone": null
+        },
+        {
+          "name": "Ezenwa Emmanuel",
+          "phone": null
+        },
+        {
+          "name": "Udeoma chidera",
+          "phone": null
+        },
+        {
+          "name": "Madukasi Godswill",
+          "phone": null
+        },
+        {
+          "name": "Ezeora Angel",
+          "phone": null
+        },
+        {
+          "name": "Okechukwu precious",
+          "phone": null
+        },
+        {
+          "name": "Eze Oluchi",
+          "phone": null
+        },
+        {
+          "name": "Ogbonna Precious",
+          "phone": null
+        },
+        {
+          "name": "Chinenye",
+          "phone": null
+        },
+        {
+          "name": "Divine Oluwa",
+          "phone": null
+        },
+        {
+          "name": "Favour Mmesoma",
+          "phone": null
+        },
+        {
+          "name": "Agu Chibueze",
+          "phone": null
+        }
+      ]
+    },
+    {
+      "unit": "Social Media",
+      "membership": "primary",
+      "members": [
+        {
+          "name": "Ezeora Evangel Oluomachi",
+          "phone": "09018149235"
+        },
+        {
+          "name": "Ibeabuchi Adanna",
+          "phone": "07068960169"
+        },
+        {
+          "name": "Izuegbulam Chinwe Blessing",
+          "phone": "09130376636"
+        },
+        {
+          "name": "Success Eziashi Ebubechukwu",
+          "phone": "08101261442"
+        },
+        {
+          "name": "Uzoechi Deborah Chiamaka",
+          "phone": "08112288230"
+        },
+        {
+          "name": "Okechukwu chidimma",
+          "phone": "07080598886"
+        },
+        {
+          "name": "Ezechi Chinwe",
+          "phone": null
+        },
+        {
+          "name": "Ezenwosu Chioma Vanessa",
+          "phone": "08135188825"
+        },
+        {
+          "name": "Onwukeme zara",
+          "phone": "08146450684"
+        },
+        {
+          "name": "Metu Amarachim",
+          "phone": "08060283236"
+        },
+        {
+          "name": "Agu Vitalis Chukwuemerie",
+          "phone": "07016639391"
+        },
+        {
+          "name": "Eze Chidiebube Ihuoma",
+          "phone": null
+        },
+        {
+          "name": "Abanokwu Bethel Chielotam",
+          "phone": null
+        },
+        {
+          "name": "Ugochukwu Christopher",
+          "phone": null
+        },
+        {
+          "name": "Ikechukwu Success",
+          "phone": null
+        },
+        {
+          "name": "Ugochi",
+          "phone": null
+        },
+        {
+          "name": "Vera Chiamaka",
+          "phone": null
+        },
+        {
+          "name": "Destiny",
+          "phone": null
+        },
+        {
+          "name": "Cynthia",
+          "phone": null
+        }
+      ]
+    },
+    {
+      "unit": "Technical",
+      "membership": "primary",
+      "members": [
+        {
+          "name": "divine oluwa",
+          "phone": "08084477742"
+        },
+        {
+          "name": "Aniobi smiles",
+          "phone": "08152878749"
+        },
+        {
+          "name": "Chibueze nwachukwu",
+          "phone": "08146359618"
+        },
+        {
+          "name": "Chidibere success",
+          "phone": "09119229230"
+        },
+        {
+          "name": "Ezenwa Emmanuel",
+          "phone": "08023813695"
+        },
+        {
+          "name": "Ifeoma Nnam",
+          "phone": "08086478211"
+        },
+        {
+          "name": "David Milagro",
+          "phone": "09060694909"
+        },
+        {
+          "name": "Nathaniel Peter",
+          "phone": "07087135592"
+        },
+        {
+          "name": "okereke goodness",
+          "phone": "08117828223"
+        },
+        {
+          "name": "Oluchi Eze",
+          "phone": "09031277384"
+        },
+        {
+          "name": "Pamela Orji",
+          "phone": "07061669987"
+        },
+        {
+          "name": "precious Okechukwu",
+          "phone": "07047146684"
+        },
+        {
+          "name": "Somto okafor",
+          "phone": "09015589563"
+        },
+        {
+          "name": "Rhema ubakibie",
+          "phone": "08166364341"
+        },
+        {
+          "name": "Samuel nwaigwe",
+          "phone": "07044205365"
+        },
+        {
+          "name": "Sunday divine",
+          "phone": "08112175408"
+        },
+        {
+          "name": "victor igattah",
+          "phone": "09130254153"
+        },
+        {
+          "name": "omekodinma Victoria",
+          "phone": "08168818299"
+        },
+        {
+          "name": "Benedicta Onyema",
+          "phone": "09117365805"
+        },
+        {
+          "name": "gift Eze",
+          "phone": "070676502264"
+        },
+        {
+          "name": "Goodness chukwuajah",
+          "phone": "07041752149"
+        },
+        {
+          "name": "Joshua chibuenyim",
+          "phone": "09068068385"
+        },
+        {
+          "name": "kelvin",
+          "phone": "07088980666"
+        },
+        {
+          "name": "Michelle",
+          "phone": "09049291694"
+        },
+        {
+          "name": "Favour",
+          "phone": "07019199742"
+        },
+        {
+          "name": "Chiwendu",
+          "phone": "09167975892"
+        },
+        {
+          "name": "Daniel",
+          "phone": "08120144461"
+        },
+        {
+          "name": "miracle",
+          "phone": "07040035664"
+        },
+        {
+          "name": "Onyinye",
+          "phone": null
+        }
+      ]
+    }
+  ],
+  "aliases": [
+    {
+      "sheet": "Ndudim Miracle",
+      "official": "Ndudum Chidimma Miracle"
+    },
+    {
+      "sheet": "Iniwoke Joyce ogheneyole",
+      "official": "Iniwoke Joy Ogheneyole"
+    },
+    {
+      "sheet": "Ezeora Angel",
+      "official": "Ezeora Evangel Oluomachi"
+    },
+    {
+      "sheet": "Ezeora Angel Oluomachi",
+      "official": "Ezeora Evangel Oluomachi"
+    },
+    {
+      "sheet": "Ikeme Ebube",
+      "official": "Ikeme Ebubechukwu Daniel"
+    },
+    {
+      "sheet": "Philip Kamsi",
+      "official": "Nwokolo Kamsiyochukwu Philip"
+    },
+    {
+      "sheet": "Favour Mmesoma",
+      "official": "Chinanu Favour Nmesoma"
+    },
+    {
+      "sheet": "Agbo Amarachi Grace",
+      "official": "Agbo Amarachi Emmanuella"
+    },
+    {
+      "sheet": "Agbo Grace A",
+      "official": "Agbo Amarachi Emmanuella"
+    },
+    {
+      "sheet": "Owan Flourish",
+      "official": "Owan Flourish Worma"
+    },
+    {
+      "sheet": "omekodinma Victoria",
+      "official": "Victoria Omekaodinma"
+    },
+    {
+      "sheet": "kelvin",
+      "official": "Chika Chukwuelokalum Benedict"
+    }
+  ]
+}

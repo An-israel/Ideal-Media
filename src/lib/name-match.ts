@@ -99,7 +99,10 @@ export function matchName(written: string, index: NameIndex): NameMatch {
   const want = new Set(tokens);
   const subset = index.all.filter((p) => {
     const have = new Set(nameTokens(p.fullName));
-    if (have.size === 0) return false;
+    // Both sides need two names. A one-word roster entry ("Chiamaka") is
+    // contained in every written name that happens to use it, which would make
+    // it a magnet claiming the wrong person.
+    if (have.size < 2) return false;
     const writtenInRoster = [...want].every((t) => have.has(t));
     const rosterInWritten = [...have].every((t) => want.has(t));
     return writtenInRoster || rosterInWritten;
