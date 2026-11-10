@@ -4,9 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionRoles } from "@/lib/auth";
-import { notifyRole } from "@/lib/notify";
 import { createUnclaimedMember } from "@/lib/member-admin";
-import { resolveAutoFollowups } from "@/lib/welfare-automation";
+import { syncWelfareForStatus } from "@/lib/welfare-automation";
 import { MAX_SUBUNITS_PER_MEMBER } from "@/lib/constants";
 import type { MemberStatus } from "@/lib/database.types";
 
@@ -43,73 +42,6 @@ export async function setMemberStatus(userIds: string[], status: MemberStatus) {
   revalidatePath("/secretary");
   revalidatePath("/welfare");
   revalidatePath("/admin/members");
-}
-
-/**
- * Keeps the welfare board in step with a member's status.
- *
- * Exported so the super-admin path uses the same logic (AUDIT ROS-4) — that
- * path skipped this entirely, so marking someone traveled opened a follow-up
- * if a secretary did it and silently did nothing if the super admin did.
- */
-export async function syncWelfareForStatus(userIds: string[], status: MemberStatus) {
-  const admin = createAdminClient();
-
-  if (status === "traveled" || status === "inactive") {
-    const reason = status;
-    // Try to open follow-ups on the welfare board. If the database doesn't
-    // know this reason yet (setup SQL not run), fall back to notifying about
-    // everyone — welfare must still hear about it either way.
-    let toFlag = userIds;
-    try {
-      const { data: existing, error: exErr } = await admin
-        .from("welfare_followups")
-        .select("user_id")
-        .eq("reason", reason)
-        .neq("status", "resolved")
-        .in("user_id", userIds);
-      if (exErr) throw new Error(exErr.message);
-      const alreadyOpen = new Set((existing ?? []).map((r) => r.user_id));
-      toFlag = userIds.filter((id) => !alreadyOpen.has(id));
-      if (toFlag.length > 0) {
-        const { error: insErr } = await admin
-          .from("welfare_followups")
-          .insert(toFlag.map((user_id) => ({ user_id, reason, auto_flagged: true })));
-        if (insErr) throw new Error(insErr.message);
-      }
-    } catch {
-      toFlag = userIds; // board entry failed — still notify the team
-    }
-    if (toFlag.length === 0) return;
-
-    // Notify the welfare team, naming who needs a follow-up.
-    const { data: profs } = await admin
-      .from("profiles")
-      .select("id, full_name")
-      .in("id", toFlag);
-    const names = (profs ?? []).map((p) => p.full_name);
-    const label = reason === "traveled" ? "traveled" : "inactive";
-    const shown = names.slice(0, 5).join(", ");
-    const more = names.length > 5 ? ` and ${names.length - 5} more` : "";
-
-    await notifyRole("welfare", {
-      type: `member_${reason}`,
-      title:
-        toFlag.length === 1
-          ? `${names[0] ?? "A member"} was marked ${label}`
-          : `${toFlag.length} members were marked ${label}`,
-      body: `Please follow up: ${shown}${more}.`,
-      link: "/welfare",
-    });
-  } else if (status === "active") {
-    // Returning members: close any auto-opened traveled/inactive follow-ups.
-    await resolveAutoFollowups(userIds, ["traveled", "inactive"]);
-  } else if (status === "graduated" || status === "left") {
-    // Someone who has graduated or left doesn't need chasing — close every
-    // auto-opened follow-up (AUDIT WEL-7). These statuses used to fall through,
-    // leaving the queue cluttered with people who are gone.
-    await resolveAutoFollowups(userIds, ["traveled", "inactive", "missed_service"]);
-  }
 }
 
 /**

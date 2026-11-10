@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getSessionRoles } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { syncWelfareForStatus } from "@/app/(app)/secretary/roster/actions";
+import { syncWelfareForStatus } from "@/lib/welfare-automation";
 import { notifyMany } from "@/lib/notify";
 import { fetchAllRows } from "@/lib/pagination";
 import { normalizePhone } from "@/lib/phone";

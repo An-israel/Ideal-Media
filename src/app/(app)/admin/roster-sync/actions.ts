@@ -306,15 +306,39 @@ export async function restoreEveryone(): Promise<RestoreEveryoneResult> {
       reactivated += batch.length;
     }
 
-    // Lift the sign-in ban for everyone who had one. Only accounts revoked
-    // through this page were ever banned — the SQL scripts could not do it —
-    // so this is the set above, and asking for an unban that was never applied
-    // is harmless.
+    // Lift every sign-in ban that exists, found by asking Supabase who is
+    // banned rather than assuming it is the people just un-revoked above.
+    //
+    // The first version unbanned exactly that list. If one unban failed, or
+    // the function was cut off part way, the profile rows were already clean —
+    // so pressing the button again found nobody "revoked", unbanned nobody,
+    // and left people restored on paper but still locked out, with no way to
+    // tell. Asking for the banned accounts makes a second press finish the job.
+    const banned: string[] = [];
+    for (let page = 1; page <= 50; page++) {
+      const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
+      if (error) {
+        failures.push(`Could not list sign-in bans: ${error.message}`);
+        break;
+      }
+      for (const u of data.users) {
+        const until = (u as { banned_until?: string | null }).banned_until;
+        if (until && new Date(until).getTime() > Date.now()) banned.push(u.id);
+      }
+      if (data.users.length < 1000) break;
+    }
+
+    // In small parallel batches: one at a time, sixty unbans is long enough to
+    // run into the function's time limit.
     let unbanned = 0;
-    for (const { id } of revoked) {
-      const { error } = await admin.auth.admin.updateUserById(id, { ban_duration: "none" });
-      if (error) failures.push(`Could not restore sign-in for ${id}: ${error.message}`);
-      else unbanned += 1;
+    for (const batch of chunk(banned, 10)) {
+      const results = await Promise.all(
+        batch.map((id) => admin.auth.admin.updateUserById(id, { ban_duration: "none" }))
+      );
+      results.forEach((r, i) => {
+        if (r.error) failures.push(`Could not restore sign-in for ${batch[i]}: ${r.error.message}`);
+        else unbanned += 1;
+      });
     }
 
     revalidatePath("/admin/roster-sync");
@@ -373,19 +397,20 @@ export async function createMissingMembers(
     let created = 0;
     let skipped = 0;
 
+    // Read the site once, then keep that picture up to date as people are
+    // created. Re-reading every profile before each person was thirty full
+    // table reads for thirty people, for the sake of knowing about the one
+    // account this loop had itself just made.
+    const accounts: AccountLike[] = (await loadAccounts()).map(toAccountLike);
+    const aliases = (memberSheets as SheetData).aliases;
+
     for (const person of people) {
       const name = person.name.trim();
       if (!name) continue;
 
-      // Re-check against the live site, not the list this started from.
-      const accounts = await loadAccounts();
       const gap = findRosterGap(
-        {
-          officialList: [{ name, phone: person.phone }],
-          sheets: [],
-          aliases: (memberSheets as SheetData).aliases,
-        },
-        accounts.map(toAccountLike)
+        { officialList: [{ name, phone: person.phone }], sheets: [], aliases },
+        accounts
       );
       if (gap.missing.length === 0) {
         skipped += 1;
@@ -393,7 +418,7 @@ export async function createMissingMembers(
       }
 
       try {
-        await createUnclaimedMember({
+        const { userId } = await createUnclaimedMember({
           fullName: name,
           email: "",
           phone: person.phone ?? "",
@@ -401,6 +426,12 @@ export async function createMissingMembers(
           // No subunit: they show up in the report's "nobody reports on them"
           // list until the department assigns one, so they cannot be forgotten.
           origin: "secretary",
+        });
+        accounts.push({
+          id: userId,
+          fullName: name,
+          phone: person.phone,
+          whatsappNumber: person.phone,
         });
         created += 1;
       } catch (e) {

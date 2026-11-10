@@ -64,6 +64,44 @@ function assertServiceHeld(serviceDate: string) {
   }
 }
 
+const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+/**
+ * Refuses a date the activity is not held on.
+ *
+ * The hub only ever links to a Sunday for Sunday Service and a Wednesday for
+ * Bible Study, but activity and date both arrive from the browser. Without
+ * this a mistyped or edited URL records "Sunday Service" on a Tuesday: a
+ * service that never took place, which then counts against everybody marked
+ * absent from it and can open welfare follow-ups for them.
+ */
+async function assertServiceDay(activityId: string, serviceDate: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(serviceDate)) {
+    throw new Error("That isn't a valid service date.");
+  }
+  const admin = createAdminClient();
+  const { data: activity } = await admin
+    .from("activities")
+    .select("name, day_of_week")
+    .eq("id", activityId)
+    .maybeSingle();
+  if (!activity) throw new Error("That activity no longer exists.");
+
+  const expected = WEEKDAYS.indexOf((activity.day_of_week ?? "").trim().toLowerCase());
+  // An activity with no recognisable day set cannot be checked, so it is let
+  // through rather than made impossible to report on.
+  if (expected === -1) return;
+  const [y, m, d] = serviceDate.split("-").map(Number);
+  const actual = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  if (actual !== expected) {
+    throw new Error(
+      `${activity.name} is held on a ${activity.day_of_week}, and ${serviceDate} is a ${
+        WEEKDAYS[actual][0].toUpperCase() + WEEKDAYS[actual].slice(1)
+      }.`
+    );
+  }
+}
+
 export interface AttendanceMark {
   userId: string;
   status: AttendanceStatus;
@@ -87,6 +125,7 @@ export async function submitAttendance(input: {
   try {
     const { session, privileged } = await authorizeSubunit(input.subunitId);
     assertServiceHeld(input.serviceDate);
+    await assertServiceDay(input.activityId, input.serviceDate);
     const admin = createAdminClient();
 
     // Never trust the client's list of people: rebuild it from the roster, so a
@@ -199,6 +238,7 @@ export async function markNoService(input: {
   try {
     const { session } = await authorizeSubunit(input.subunitId);
     assertServiceHeld(input.serviceDate);
+    await assertServiceDay(input.activityId, input.serviceDate);
     const admin = createAdminClient();
 
     const { error } = await admin.from("attendance_submissions").upsert(
@@ -283,6 +323,7 @@ export async function previewAbsenteePaste(input: {
   try {
     await authorizeDepartment();
     assertServiceHeld(input.serviceDate);
+    await assertServiceDay(input.activityId, input.serviceDate);
     const parsed = parseAbsenteeReport(input.text);
     if (parsed.absentees.length === 0) {
       return {
@@ -354,6 +395,7 @@ export async function commitAbsenteePaste(input: {
   try {
     const session = await authorizeDepartment();
     assertServiceHeld(input.serviceDate);
+    await assertServiceDay(input.activityId, input.serviceDate);
     const admin = createAdminClient();
     const roster = await getDepartmentRoster();
     const onRoll = new Set(roster.map((r) => r.userId));

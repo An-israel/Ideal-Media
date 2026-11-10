@@ -8,6 +8,14 @@ import { memberAccessMigrations } from "@/lib/schema-check";
 import { RosterSyncFlow } from "./roster-sync-flow";
 import { RestorePanel } from "./restore-panel";
 
+/**
+ * Restoring everyone and creating missing accounts each make one call to
+ * Supabase Auth per person. That is quick, but not ten-seconds-for-sixty-people
+ * quick, so this page's actions get the room to finish rather than being cut
+ * off half way through a batch.
+ */
+export const maxDuration = 60;
+
 export default async function RosterSyncPage() {
   const session = await getSessionRoles();
   if (!session) return null;

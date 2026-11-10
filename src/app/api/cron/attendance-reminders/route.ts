@@ -14,10 +14,12 @@ import { formatReportDate } from "@/lib/attendance-report";
 /**
  * Nudges leaders who still owe an attendance report.
  *
- * Fires hourly (see vercel.json) and sends at most two reminders per service:
- * one on the morning the report is due, one two hours before the 8PM WAT
- * deadline. Only leaders of subunits with nothing recorded are notified, so
- * nobody is nagged after they have done their part.
+ * Runs once a day at 18:00 WAT (see vercel.json — the Hobby plan allows no
+ * more), which is two hours before the 8PM deadline, so in practice it sends
+ * the final reminder for whichever service is due that evening. The morning
+ * window is kept for a plan that can run it more often. Only leaders of
+ * primary subunits with nothing recorded are notified, so nobody is nagged
+ * after they have done their part.
  *
  * Authenticates itself for the same reason as the birthday route: /api is
  * excluded from the session proxy, so this request carries no Supabase session.
@@ -70,7 +72,15 @@ export async function GET(request: NextRequest) {
       .maybeSingle();
     if (marker) continue;
 
-    const { data: subunits } = await admin.from("subunits").select("id, name");
+    // Primary units only. Secondary units (Video Editing, Graphic Design,
+    // Welfare, Secretary, Publication) never file attendance — their members
+    // are counted by their primary unit — so they are permanently "not
+    // submitted", and reading every subunit here nagged their leaders about a
+    // report that does not exist, twice a week, for ever.
+    const { data: subunits } = await admin
+      .from("subunits")
+      .select("id, name")
+      .eq("category", "primary");
     const { data: submitted } = await admin
       .from("attendance_submissions")
       .select("subunit_id")
@@ -90,7 +100,24 @@ export async function GET(request: NextRequest) {
         .range(from, to)
     );
 
-    const recipients = [...new Set(leaders.map((l) => l.user_id))];
+    // Not a leader who has left or had their access removed: the notification
+    // would sit unread on an account nobody opens, and the count below would
+    // claim somebody had been reminded.
+    const leaderIds = [...new Set(leaders.map((l) => l.user_id))];
+    const reachable =
+      leaderIds.length > 0
+        ? await fetchAllRows<{ id: string; member_status: string }>((from, to) =>
+            admin
+              .from("profiles")
+              .select("id, member_status")
+              .in("id", leaderIds)
+              .is("access_revoked_at", null)
+              .range(from, to)
+          )
+        : [];
+    const recipients = reachable
+      .filter((p) => !["left", "graduated"].includes(p.member_status))
+      .map((p) => p.id);
     if (recipients.length > 0) {
       const deadline = formatWAT(deadlineFor(service.date));
       await notifyMany(
@@ -125,10 +152,14 @@ export async function GET(request: NextRequest) {
  */
 function dueKind(now: Date, serviceDate: string): "morning" | "final" | null {
   const t = now.getTime();
-  const hour = 3600_000;
   const morning = morningReminderFor(serviceDate).getTime();
   const final = finalReminderFor(serviceDate).getTime();
-  if (t >= morning && t < morning + hour) return "morning";
-  if (t >= final && t < final + hour) return "final";
+  const deadline = deadlineFor(serviceDate).getTime();
+  // Each window runs until the next thing happens, not for exactly one hour.
+  // Vercel starts a daily cron "sometime within the hour", and a run that
+  // began a few seconds past a one-hour window sent nothing at all that day.
+  // The marker row is what stops a repeat, so a wide window costs nothing.
+  if (t >= final && t < deadline) return "final";
+  if (t >= morning && t < final) return "morning";
   return null;
 }

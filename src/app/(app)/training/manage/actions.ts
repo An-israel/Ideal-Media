@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyMany } from "@/lib/notify";
 import { fetchAllRows } from "@/lib/pagination";
-import { requireTrainingManager } from "../actions";
+import { requireTrainingManager } from "@/lib/training-auth";
 import {
   MAX_TEACHING_UPLOAD_BYTES,
   ACCEPTED_TEACHING_AUDIO,

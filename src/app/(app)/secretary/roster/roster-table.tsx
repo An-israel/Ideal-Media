@@ -31,6 +31,9 @@ export type RosterRow = {
   claimed: boolean;
 };
 
+/** Shown as the subunit of a member who has no primary one yet. */
+export const UNASSIGNED = "No subunit yet";
+
 const ORIGIN_LABEL: Record<string, string> = {
   self_signup: "Joined",
   import: "Imported",
@@ -74,7 +77,10 @@ export function RosterTable({
     () =>
       rows.filter(
         (r) =>
-          (statusFilter === "all" || r.status === statusFilter) &&
+          (statusFilter === "all" ||
+            (statusFilter === "unassigned"
+              ? r.subunit === UNASSIGNED
+              : r.status === statusFilter)) &&
           r.name.toLowerCase().includes(query.toLowerCase())
       ),
     [rows, query, statusFilter]
@@ -227,6 +233,7 @@ export function RosterTable({
         />
         <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-40">
           <option value="all">All statuses</option>
+          <option value="unassigned">No subunit yet</option>
           {MEMBER_STATUSES.map((s) => (
             <option key={s} value={s}>
               {s}
@@ -327,7 +334,15 @@ export function RosterTable({
                     <span className="text-xs text-[var(--text-muted)]">not signed up yet</span>
                   )}
                 </div>
-                <span className="hidden truncate text-[var(--text-muted)] sm:block">{r.subunit}</span>
+                <span
+                  className={
+                    r.subunit === UNASSIGNED
+                      ? "hidden truncate font-medium text-[var(--warning)] sm:block"
+                      : "hidden truncate text-[var(--text-muted)] sm:block"
+                  }
+                >
+                  {r.subunit}
+                </span>
                 <Badge variant={r.origin === "self_signup" ? "success" : "neutral"}>
                   {ORIGIN_LABEL[r.origin] ?? r.origin}
                 </Badge>

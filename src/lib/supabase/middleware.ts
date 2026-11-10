@@ -65,7 +65,15 @@ export async function updateSession(request: NextRequest) {
     .eq("id", user.id)
     .single();
 
-  if (!profile?.coc_completed && !path.startsWith("/coc")) {
+  // /access-removed is exempt as well as /coc. Without that, somebody whose
+  // access was removed before they ever took the quiz could never reach the
+  // page that tells them so: every request was sent to /coc first, which walked
+  // a person who is no longer in the unit through the Code of Conduct.
+  if (
+    !profile?.coc_completed &&
+    !path.startsWith("/coc") &&
+    !path.startsWith("/access-removed")
+  ) {
     const url = request.nextUrl.clone();
     url.pathname = "/coc";
     return NextResponse.redirect(url);

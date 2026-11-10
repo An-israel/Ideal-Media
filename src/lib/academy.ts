@@ -25,7 +25,7 @@ export { videosFor, isDualLesson } from "@/lib/academy-content";
  * keeps one course page to a handful of queries instead of one per module.
  */
 
-/** Course rows for the academy index, newest content ordering first. */
+/** Published course rows for the academy index, in the academy's own order. */
 export async function listCourses(): Promise<AcademyCourse[]> {
   const admin = createAdminClient();
   return fetchAllRows<AcademyCourse>((from, to) =>

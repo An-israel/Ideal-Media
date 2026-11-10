@@ -11,6 +11,18 @@ export default async function CocPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Removed members are turned away before the quiz, not after it. Read on its
+  // own and tolerated if it fails, like the same check in getSessionRoles: the
+  // column arrives with migration 0015.
+  const { data: access } = await supabase
+    .from("profiles")
+    .select("access_revoked_at")
+    .eq("id", user.id)
+    .maybeSingle();
+  if ((access as { access_revoked_at?: string | null } | null)?.access_revoked_at) {
+    redirect("/access-removed");
+  }
+
   const { data: profile } = await supabase
     .from("profiles")
     .select("coc_completed")

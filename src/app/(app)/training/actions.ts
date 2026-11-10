@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionRoles, type SessionRoles } from "@/lib/auth";
 import { qualifiesAsListened, clampPlayedIncrement } from "@/lib/training-progress";
@@ -10,36 +9,8 @@ import type { TeachingCompletionSource } from "@/lib/database.types";
 async function requireUser(): Promise<SessionRoles> {
   const session = await getSessionRoles();
   if (!session) throw new Error("Not authenticated");
+  if (session.accessRevoked) throw new Error("Your access has been removed.");
   return session;
-}
-
-/** Super admin or secretary may add, edit and publish teachings. */
-export async function requireTrainingManager(): Promise<SessionRoles> {
-  const session = await requireUser();
-  if (!session.roles.includes("super_admin") && !session.roles.includes("secretary")) {
-    throw new Error("Only a super admin or secretary can manage the training library.");
-  }
-  return session;
-}
-
-/**
- * Who may see the listen report, and over which members.
- *
- * Super admins and secretaries see the whole department. A subunit leader sees
- * only their own subunits' members — which is what `subunitIds` narrows.
- */
-export async function requireTrainingReportAccess(): Promise<{
-  session: SessionRoles;
-  subunitIds?: string[];
-}> {
-  const session = await requireUser();
-  if (session.roles.includes("super_admin") || session.roles.includes("secretary")) {
-    return { session };
-  }
-  if (session.ledSubunitIds.length > 0) {
-    return { session, subunitIds: session.ledSubunitIds };
-  }
-  throw new Error("You don't have access to the training report.");
 }
 
 export interface ProgressUpdate {
@@ -69,7 +40,10 @@ export interface ProgressResult {
  */
 export async function reportProgress(update: ProgressUpdate): Promise<ProgressResult> {
   const session = await requireUser();
-  const supabase = await createClient();
+  // Progress is written with the service role, and migration 0018 takes away
+  // a member's own permission to write this table. The clamp below is the whole
+  // point of the report — and it means nothing if the same row can be written
+  // straight to the database with "3600 seconds, completed" in it.
   const admin = createAdminClient();
 
   const { data: teaching } = await admin
@@ -90,7 +64,7 @@ export async function reportProgress(update: ProgressUpdate): Promise<ProgressRe
       .eq("id", teaching.id);
   }
 
-  const { data: existing } = await supabase
+  const { data: existing } = await admin
     .from("teaching_progress")
     .select("id, listened_seconds, furthest_seconds, completed, completion_source")
     .eq("user_id", session.userId)
@@ -129,13 +103,13 @@ export async function reportProgress(update: ProgressUpdate): Promise<ProgressRe
   };
 
   if (existing) {
-    const { error } = await supabase
+    const { error } = await admin
       .from("teaching_progress")
       .update(row)
       .eq("id", existing.id);
     if (error) throw new Error(error.message);
   } else {
-    const { error } = await supabase
+    const { error } = await admin
       .from("teaching_progress")
       .insert({ ...row, first_opened_at: now });
     if (error) throw new Error(error.message);
@@ -157,9 +131,18 @@ export async function reportProgress(update: ProgressUpdate): Promise<ProgressRe
  */
 export async function markTeachingListened(teachingId: string, listened: boolean) {
   const session = await requireUser();
-  const supabase = await createClient();
+  const admin = createAdminClient();
 
-  const { data: existing } = await supabase
+  // Only a published teaching can be ticked: the id comes from the browser,
+  // and a draft is not something a member can have listened to.
+  const { data: teaching } = await admin
+    .from("training_teachings")
+    .select("id, is_published")
+    .eq("id", teachingId)
+    .maybeSingle();
+  if (!teaching || !teaching.is_published) throw new Error("Teaching not found.");
+
+  const { data: existing } = await admin
     .from("teaching_progress")
     .select("id, completion_source")
     .eq("user_id", session.userId)
@@ -177,13 +160,13 @@ export async function markTeachingListened(teachingId: string, listened: boolean
         "This teaching was completed by playing it through, so it can't be un-marked."
       );
     }
-    const { error } = await supabase
+    const { error } = await admin
       .from("teaching_progress")
       .update({ completed: false, completed_at: null, completion_source: null })
       .eq("id", existing.id);
     if (error) throw new Error(error.message);
   } else if (existing) {
-    const { error } = await supabase
+    const { error } = await admin
       .from("teaching_progress")
       .update({
         completed: true,
@@ -195,7 +178,7 @@ export async function markTeachingListened(teachingId: string, listened: boolean
       .eq("id", existing.id);
     if (error) throw new Error(error.message);
   } else {
-    const { error } = await supabase.from("teaching_progress").insert({
+    const { error } = await admin.from("teaching_progress").insert({
       user_id: session.userId,
       teaching_id: teachingId,
       completed: true,

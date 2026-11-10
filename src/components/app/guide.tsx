@@ -19,7 +19,8 @@ function sectionsFor(roles: Role[]): Section[] {
       steps: [
         "**Dashboard** — your subunits, your training progress, and a performance ring that grows as you do courses and attend service.",
         "**General Training** 🎧 — teaching for the whole department. Play it here and your progress is tracked automatically; skipping ahead doesn't count.",
-        "**My Courses** — learn one module at a time; they unlock in order. 🔓",
+        "**Skills Academy** 🎓 — 22 free courses, from graphic design to video editing. Start any of them straight away; tick each lesson as you finish it, submit the assignment at the end of each module, and collect your certificate when the course is done.",
+        "**My Courses** — your own subunit's training. Learn one module at a time; they unlock in order. 🔓",
         "**Subunits** — browse every unit, join the ones you serve in, and request their courses.",
         "In the wrong unit? Open **Subunits**, pick the right one and tap **Make this my primary** — a leader approves the move.",
         "Every course shows **who teaches it**. Finished a task? Tap **Submit to leader on WhatsApp** — it opens a chat straight to that instructor, and they approve it back here.",
@@ -75,6 +76,8 @@ function sectionsFor(roles: Role[]): Section[] {
       steps: [
         "**Roles** — promote leaders, secretary, welfare.",
         "**Subunits, Activities, Code of Conduct, Overview** all live here.",
+        "**Members list** — put removed members back, and create accounts for people who are on a subunit sheet but not yet on the site.",
+        "**Skills Academy** — load or refresh the academy's courses. Safe to press again; nobody's progress is lost.",
       ],
     });
   return sections;
