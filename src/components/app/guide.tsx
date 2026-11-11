@@ -43,6 +43,7 @@ function sectionsFor(roles: Role[]): Section[] {
         "**Subunits → Review change requests** — approve someone moving into or out of your unit.",
         "**Attendance** 🗓️ — each Sunday and Bible Study, tick who was present and give a reason for each absence. Sunday is due **Monday 8PM**, Bible Study **Thursday 8PM** (WAT). After the deadline you can still submit, but it is marked late and corrections then go through the secretary or welfare.",
         "**General Training → See who's listened** — who in your unit still hasn't been through it.",
+        "**Skills Academy → See who is learning what** — which of your members have started a course, how far they are, and who has finished.",
       ],
     });
   if (has("secretary") || has("super_admin"))
@@ -54,6 +55,9 @@ function sectionsFor(roles: Role[]): Section[] {
         "**Attendance** — pick activity + date, upload a sheet **or snap photos** 📸 (every tab of a workbook is read). AI maps names → review → **Commit**. Committed by mistake? **Reopen** it.",
         "**Attendance → Paste an absentee list** 📋 — paste the report you already write each week. Everyone named is marked absent under their heading, everyone else present. You see exactly what it will change before anything is saved.",
         "**Roster** — set member status. “Traveled” skips missed-service flags.",
+        "**Roster → No subunit yet** — members nobody takes attendance for. Check the **Suggested subunits** box above the list: it reads the unit sheets and course history and proposes a unit for each, for you to confirm.",
+        "**Roster → Claim link** 🔗 — for someone who hasn't signed up yet and has no phone or email on file. Send them the link and their sign-up attaches to their existing record instead of making a second one.",
+        "**Roster → Archive** — takes someone off the roll and stops them signing in. Nothing is deleted; pick **Archived** in the filter to restore them.",
         "**General Training** 🎧 — add teachings, publish them, and see exactly who has and hasn't listened.",
         "**Subunits → Review change requests** — approve members moving between units.",
       ],

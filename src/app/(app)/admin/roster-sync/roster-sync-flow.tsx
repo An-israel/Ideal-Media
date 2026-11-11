@@ -2,9 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ShieldCheck, UserMinus, UserPlus, Check, Undo2 } from "lucide-react";
+import { AlertTriangle, UserPlus, Check, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -23,6 +22,15 @@ type Preview = Extract<PreviewResult, { ok: true }>;
 /** What the admin decided for one entry that could not be matched confidently. */
 type Decision = { kind: "match"; accountId: string } | { kind: "create" } | { kind: "skip" };
 
+/**
+ * Adding members from a pasted list.
+ *
+ * This screen used to do two things with a list: create the people on it who
+ * had no account, and take access away from everyone on the site who was not
+ * on it. The department has since decided that nobody is removed, so the
+ * second half is gone — a list can now only ever add people. Somebody on the
+ * site but not on the list is simply left as they are.
+ */
 export function RosterSyncFlow({
   alreadyRevoked,
 }: {
@@ -33,10 +41,6 @@ export function RosterSyncFlow({
   const [text, setText] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [decisions, setDecisions] = useState<Record<number, Decision>>({});
-  const [reason, setReason] = useState("Not on the current members list");
-  const [confirmText, setConfirmText] = useState("");
-  /** Opt-in: role holders are never removed automatically. */
-  const [alsoRemoveRoleHolders, setAlsoRemoveRoleHolders] = useState(false);
 
   function runPreview(skipPositions: number[] = []) {
     start(async () => {
@@ -47,7 +51,6 @@ export function RosterSyncFlow({
       }
       setPreview(res);
       setDecisions({});
-      setConfirmText("");
     });
   }
 
@@ -58,20 +61,25 @@ export function RosterSyncFlow({
           <RevokedList rows={alreadyRevoked} pending={pending} start={start} router={router} />
         )}
         <Card>
-          <CardContent className="space-y-4 py-5">
+          <CardHeader className="gap-1">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <UserPlus className="h-4 w-4" /> Add members from a list
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="list">The official members list</Label>
+              <Label htmlFor="list">Paste a members list</Label>
               <Textarea
                 id="list"
-                rows={14}
+                rows={10}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 placeholder={"1. Full Name - 08012345678\n2. Another Name - 09012345678\n…"}
               />
               <p className="text-xs text-[var(--text-muted)]">
-                One member per numbered line. Anyone on the site but <strong>not</strong> on
-                this list will be shown for removal. Nothing is changed until you approve it on
-                the next screen.
+                One member per numbered line. Anyone on the list who has no account is offered
+                for creation. <strong>Nobody is removed</strong> — people on the site who are
+                not on your list are left exactly as they are.
               </p>
             </div>
             <Button disabled={pending || !text.trim()} onClick={() => runPreview()}>
@@ -86,10 +94,6 @@ export function RosterSyncFlow({
   const { plan, parsed } = preview;
   const undecided = plan.confirm.filter((c) => !decisions[c.listed.position]);
 
-  const revokeIds = [
-    ...plan.revoke.map((a) => a.id),
-    ...(alsoRemoveRoleHolders ? plan.protectedFromRevoke.map((a) => a.id) : []),
-  ];
   const createRows = [
     ...plan.create.map((m) => ({ name: m.name, phone: m.phone })),
     ...plan.confirm
@@ -97,26 +101,16 @@ export function RosterSyncFlow({
       .map((c) => ({ name: c.listed.name, phone: c.listed.phone })),
   ];
 
-  // What the department actually cares about: how many accounts stay active.
-  const activeAfter = preview.accountsOnSite - revokeIds.length + createRows.length;
-
-  const ready = undecided.length === 0 && confirmText.trim().toUpperCase() === "REMOVE";
+  const ready = undecided.length === 0 && createRows.length > 0;
 
   function apply() {
     start(async () => {
-      const res = await applyRosterSync({
-        revokeUserIds: revokeIds,
-        createMembers: createRows,
-        reason,
-      });
+      const res = await applyRosterSync({ createMembers: createRows });
       if (!res.ok) {
         toast({ title: "Nothing was changed", description: res.error, variant: "error" });
         return;
       }
-      toast({
-        title: "Members list updated",
-        description: `${res.revoked} removed, ${res.created} created.`,
-      });
+      toast({ title: `${res.created} member${res.created === 1 ? "" : "s"} added` });
       if (res.failures && res.failures.length > 0) {
         toast({
           title: `${res.failures.length} problem(s)`,
@@ -139,33 +133,16 @@ export function RosterSyncFlow({
         <CardContent className="space-y-3 pb-5">
           <div className="flex flex-wrap gap-6">
             <Stat label="On your list" value={parsed.total} />
-            <Stat label="Accounts on site" value={preview.accountsOnSite} />
-            <Stat label="Matched, keeping access" value={plan.keep.length} tone="success" />
-            <Stat label="Will lose access" value={plan.revoke.length} tone="danger" />
+            <Stat label="Already have an account" value={plan.keep.length} tone="success" />
             <Stat label="Will be created" value={createRows.length} />
             <Stat label="Need your decision" value={undecided.length} tone="warning" />
-            <Stat
-              label="Active after this"
-              value={activeAfter}
-              tone={activeAfter > parsed.total ? "warning" : "success"}
-            />
           </div>
 
-          <Warn>
-            Removing access does <strong>not</strong> delete anyone. They cannot sign in and
-            drop off every roster and future report, but their attendance history is kept and
-            past reports still read exactly as you sent them. You can restore any of them here.
-          </Warn>
-
-          {activeAfter > parsed.total && (
-            <Warn>
-              {activeAfter} accounts would stay active, but your list has {parsed.total} names.
-              The difference is{" "}
-              {plan.protectedFromRevoke.length > 0 && !alsoRemoveRoleHolders
-                ? `the ${plan.protectedFromRevoke.length} role holder(s) below, which are not removed automatically`
-                : "accounts still awaiting a decision above"}
-              .
-            </Warn>
+          {plan.revoke.length + plan.protectedFromRevoke.length > 0 && (
+            <p className="text-sm text-[var(--text-muted)]">
+              {plan.revoke.length + plan.protectedFromRevoke.length} people on the site are not
+              on this list. Nothing happens to them.
+            </p>
           )}
 
           {parsed.possibleDuplicates.map(({ a, b }) => (
@@ -214,9 +191,7 @@ export function RosterSyncFlow({
                     <p className="text-sm font-medium">
                       #{c.listed.position} {c.listed.name}
                     </p>
-                    {c.listed.phone && (
-                      <Badge variant="neutral">{c.listed.phone}</Badge>
-                    )}
+                    {c.listed.phone && <Badge variant="neutral">{c.listed.phone}</Badge>}
                     {d && <Badge variant="success">decided</Badge>}
                   </div>
                   <p className="text-xs text-[var(--text-muted)]">{c.reason}</p>
@@ -241,7 +216,7 @@ export function RosterSyncFlow({
                     <option value="">Choose…</option>
                     {c.options.map((o) => (
                       <option key={o.id} value={o.id}>
-                        Keep existing account: {o.fullName}
+                        They already have an account: {o.fullName}
                       </option>
                     ))}
                     <option value="create">Create a new account for them</option>
@@ -254,64 +229,6 @@ export function RosterSyncFlow({
         </Card>
       )}
 
-      {plan.protectedFromRevoke.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ShieldCheck className="h-4 w-4" />
-              {plan.protectedFromRevoke.length} account
-              {plan.protectedFromRevoke.length === 1 ? "" : "s"} protected
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 pb-5">
-            <p className="text-sm text-[var(--text-muted)]">
-              Not on your list, but they hold a role. They are kept by default so this cannot
-              lock out your secretary, welfare team or your own second account by accident.
-            </p>
-            <ul className="space-y-1 text-sm">
-              {plan.protectedFromRevoke.map((a) => (
-                <li key={a.id}>
-                  {a.fullName} — <span className="text-[var(--text-muted)]">{a.roles.join(", ")}</span>
-                </li>
-              ))}
-            </ul>
-            <label className="flex items-start gap-2 rounded-lg border border-[var(--danger)]/30 bg-[var(--danger)]/10 px-3 py-2 text-sm">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={alsoRemoveRoleHolders}
-                onChange={(e) => setAlsoRemoveRoleHolders(e.target.checked)}
-              />
-              <span>
-                Remove {plan.protectedFromRevoke.length === 1 ? "this account" : "these accounts"}{" "}
-                too &mdash; the list is the list. Read the names above first; your own account is
-                never removed.
-              </span>
-            </label>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base text-[var(--danger)]">
-            <UserMinus className="h-4 w-4" /> {plan.revoke.length} will lose access
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="max-h-80 divide-y divide-[var(--border)] overflow-y-auto p-0">
-          {plan.revoke.length === 0 && (
-            <p className="px-4 py-6 text-sm text-[var(--text-muted)]">
-              Nobody on the site is missing from your list.
-            </p>
-          )}
-          {plan.revoke.map((a) => (
-            <p key={a.id} className="px-4 py-2 text-sm">
-              {a.fullName}
-            </p>
-          ))}
-        </CardContent>
-      </Card>
-
       {createRows.length > 0 && (
         <Card>
           <CardHeader>
@@ -321,14 +238,14 @@ export function RosterSyncFlow({
           </CardHeader>
           <CardContent className="max-h-64 divide-y divide-[var(--border)] overflow-y-auto p-0">
             {createRows.map((m) => (
-              <p key={m.name} className="px-4 py-2 text-sm">
+              <p key={`${m.name}-${m.phone ?? ""}`} className="px-4 py-2 text-sm">
                 {m.name}{" "}
                 <span className="text-[var(--text-muted)]">{m.phone ?? "no phone"}</span>
               </p>
             ))}
             <p className="px-4 py-3 text-xs text-[var(--text-muted)]">
-              Created without a subunit. They appear in the report&apos;s &ldquo;nobody reports
-              on them&rdquo; list until you assign primary subunits.
+              Created without a subunit. They show on the Roster under &ldquo;No subunit
+              yet&rdquo; until somebody places them.
             </p>
           </CardContent>
         </Card>
@@ -336,33 +253,21 @@ export function RosterSyncFlow({
 
       <Card>
         <CardContent className="space-y-3 py-5">
-          <div className="space-y-2">
-            <Label htmlFor="reason">Reason (recorded against each person)</Label>
-            <Input id="reason" value={reason} onChange={(e) => setReason(e.target.value)} />
-          </div>
-          {undecided.length > 0 ? (
+          {undecided.length > 0 && (
             <Warn>
               Decide the {undecided.length} outstanding{" "}
               {undecided.length === 1 ? "entry" : "entries"} above before applying.
             </Warn>
-          ) : (
-            <div className="space-y-2">
-              <Label htmlFor="confirm">
-                Type <strong>REMOVE</strong> to confirm {plan.revoke.length} removal
-                {plan.revoke.length === 1 ? "" : "s"}
-              </Label>
-              <Input
-                id="confirm"
-                value={confirmText}
-                onChange={(e) => setConfirmText(e.target.value)}
-                placeholder="REMOVE"
-              />
-            </div>
+          )}
+          {undecided.length === 0 && createRows.length === 0 && (
+            <p className="text-sm text-[var(--text-muted)]">
+              Everyone on this list already has an account, so there is nothing to add.
+            </p>
           )}
           <div className="flex flex-wrap gap-2">
             <Button disabled={pending || !ready} onClick={apply}>
               <Check className="h-4 w-4" />
-              {pending ? "Applying…" : "Apply changes"}
+              {pending ? "Adding…" : `Add ${createRows.length} member${createRows.length === 1 ? "" : "s"}`}
             </Button>
             <Button variant="ghost" disabled={pending} onClick={() => setPreview(null)}>
               Back to the list

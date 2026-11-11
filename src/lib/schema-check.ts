@@ -66,6 +66,15 @@ export async function academyMigrations(): Promise<MigrationNeed[]> {
   return needs;
 }
 
+/** Migrations the claim-link feature depends on. */
+export async function claimInviteMigrations(): Promise<MigrationNeed[]> {
+  const needs: MigrationNeed[] = [];
+  if (!(await columnExists("member_claim_invites", "token_hash"))) {
+    needs.push({ file: "0019_claim_invites.sql", feature: "claim links" });
+  }
+  return needs;
+}
+
 /** Migrations the members-list and subunit tools depend on. */
 export async function memberAccessMigrations(): Promise<MigrationNeed[]> {
   const needs: MigrationNeed[] = [];

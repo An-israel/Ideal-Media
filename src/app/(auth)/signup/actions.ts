@@ -5,6 +5,7 @@ import { fetchAllRows } from "@/lib/pagination";
 import { notifyRole } from "@/lib/notify";
 import { phoneKey } from "@/lib/phone";
 import { MAX_SUBUNITS_PER_MEMBER } from "@/lib/constants";
+import { resolveClaimInvite, consumeClaimInvite } from "@/lib/claim-invite";
 import type { Profile } from "@/lib/database.types";
 
 export interface SignupInput {
@@ -16,6 +17,11 @@ export interface SignupInput {
   whatsappNumber: string;
   primarySubunitId: string;
   secondarySubunitIds: string[];
+  /**
+   * From a claim link the secretary sent. Attaches this sign-up to that one
+   * roster record, for members who have no email or phone on file to match on.
+   */
+  claimToken?: string;
 }
 
 export interface SignupResult {
@@ -145,7 +151,7 @@ export async function signUpAction(input: SignupInput): Promise<SignupResult> {
     email: string;
     full_name: string;
     claimed: boolean;
-    via: "email" | "phone";
+    via: "email" | "phone" | "invite";
   };
 
   let match: Match | null = null;
@@ -162,6 +168,34 @@ export async function signUpAction(input: SignupInput): Promise<SignupResult> {
         break;
       }
     }
+  }
+
+  // ---- A claim link decides the match outright ----
+  // Resolved after the ordinary matching on purpose, so that it can notice the
+  // one case it must refuse: the email typed belongs to a DIFFERENT person.
+  let inviteId: string | null = null;
+  if (input.claimToken) {
+    const invite = await resolveClaimInvite(input.claimToken);
+    if (!invite) {
+      return {
+        ok: false,
+        error:
+          "That claim link has expired or has already been used. Ask the secretary to send you a new one.",
+      };
+    }
+    if (match && match.id !== invite.userId) {
+      return {
+        ok: false,
+        error:
+          match.via === "email"
+            ? "That email address already belongs to another account. Use a different email, or log in if that account is yours."
+            : "That phone number is already on another member's record. Ask the secretary to check your details.",
+      };
+    }
+    const invited = allProfiles.find((p) => p.id === invite.userId);
+    if (!invited) return { ok: false, error: "That record no longer exists." };
+    match = { ...invited, via: "invite" };
+    inviteId = invite.inviteId;
   }
 
   // ---- Already a real (claimed) account ----
@@ -218,6 +252,17 @@ export async function signUpAction(input: SignupInput): Promise<SignupResult> {
     }
     if (claimErr) return { ok: false, error: claimErr };
 
+    // Spend the link only once the login has actually been set up, so a failed
+    // attempt above leaves it usable. If it was spent in the meantime, two
+    // people opened the same link and this one lost — nothing has been attached
+    // to them yet, so it can still be refused cleanly.
+    if (inviteId && !(await consumeClaimInvite(inviteId))) {
+      return {
+        ok: false,
+        error: "That claim link has just been used. Ask the secretary to send you a new one.",
+      };
+    }
+
     const update: Partial<Profile> = { claimed: true, email: signInEmail };
     if (trimmedName) update.full_name = trimmedName;
     if (input.location) update.location = input.location;
@@ -254,7 +299,9 @@ export async function signUpAction(input: SignupInput): Promise<SignupResult> {
     await notifyRole("secretary", {
       type: "member_claimed",
       title: "Roster record claimed",
-      body: `${trimmedName} claimed the roster record for ${match.full_name} (matched by ${match.via}).`,
+      body: `${trimmedName} claimed the roster record for ${match.full_name} (${
+        match.via === "invite" ? "using a claim link" : `matched by ${match.via}`
+      }).`,
       link: "/secretary/roster",
     });
 

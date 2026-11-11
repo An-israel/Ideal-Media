@@ -1,12 +1,13 @@
 import Link from "next/link";
 import Image from "next/image";
-import { GraduationCap, CheckCircle2 } from "lucide-react";
+import { GraduationCap, CheckCircle2, BarChart3 } from "lucide-react";
 import { getSessionRoles } from "@/lib/auth";
 import { listCourses, courseProgressFor } from "@/lib/academy";
 import { academyMigrations } from "@/lib/schema-check";
 import { MigrationNotice } from "@/components/app/migration-notice";
 import { PageHeader } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CategoryFilter } from "./category-filter";
 
@@ -67,6 +68,11 @@ export default async function AcademyPage({
     ? courses.filter((c) => c.category === category)
     : courses;
 
+  const canSeeReport =
+    session.roles.includes("super_admin") ||
+    session.roles.includes("secretary") ||
+    session.ledSubunitIds.length > 0;
+
   const started = courses.filter((c) => (progress.get(c.id)?.done ?? 0) > 0).length;
   const finished = courses.filter((c) => progress.get(c.id)?.complete).length;
 
@@ -82,6 +88,16 @@ export default async function AcademyPage({
               }.`
         }
       />
+
+      {canSeeReport && (
+        <div className="mb-4">
+          <Link href="/academy/report">
+            <Button variant="outline" size="sm">
+              <BarChart3 className="h-4 w-4" /> See who is learning what
+            </Button>
+          </Link>
+        </div>
+      )}
 
       <CategoryFilter categories={categories} active={category ?? null} />
 

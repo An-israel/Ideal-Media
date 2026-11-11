@@ -24,9 +24,15 @@ type Subunit = { id: string; name: string; category: string };
 export function SignupForm({
   primary,
   secondary,
+  invite,
+  inviteProblem,
 }: {
   primary: Subunit[];
   secondary: Subunit[];
+  /** Set when the page was opened from a valid claim link. */
+  invite: { token: string; fullName: string } | null;
+  /** A claim link was given but is expired, used or unknown. */
+  inviteProblem: boolean;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
@@ -34,7 +40,7 @@ export function SignupForm({
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
-    fullName: "",
+    fullName: invite?.fullName ?? "",
     email: "",
     phone: "",
     location: "",
@@ -80,6 +86,7 @@ export function SignupForm({
       ...form,
       primarySubunitId: primaryId,
       secondarySubunitIds: secondaryIds,
+      claimToken: invite?.token,
     });
     if (!result.ok) {
       setLoading(false);
@@ -123,6 +130,19 @@ export function SignupForm({
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {invite && (
+          <p className="mb-4 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/8 px-3 py-2 text-sm">
+            You&apos;re claiming the record the media team already holds for{" "}
+            <strong>{invite.fullName}</strong>. Finish signing up and your attendance and subunit
+            come with you.
+          </p>
+        )}
+        {inviteProblem && (
+          <p className="mb-4 rounded-lg border border-[var(--warning)]/30 bg-[var(--warning)]/10 px-3 py-2 text-sm text-[var(--warning)]">
+            That claim link has expired or has already been used. Ask the secretary for a new
+            one — signing up without it may create a second record for you.
+          </p>
+        )}
         {step === 1 ? (
           <form onSubmit={goToSubunits} className="space-y-4">
             <div className="space-y-2">

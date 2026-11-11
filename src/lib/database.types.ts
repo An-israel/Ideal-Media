@@ -300,6 +300,18 @@ export type TrainingSeries = {
   updated_at: string | null;
 };
 
+/** A single-use link that claims one roster record at signup. Service role only. */
+export type MemberClaimInvite = {
+  id: string;
+  user_id: string;
+  /** SHA-256 of the token; the token itself is never stored. */
+  token_hash: string;
+  created_by: string | null;
+  created_at: string;
+  expires_at: string;
+  used_at: string | null;
+};
+
 /** One Skills Academy course. `slug` is its identity: URL, cover file, import key. */
 export type AcademyCourse = {
   id: string;
@@ -514,6 +526,7 @@ export type Database = {
       attendance_records: TableDef<AttendanceRecord>;
       attendance_submissions: TableDef<AttendanceSubmission>;
       monthly_attendance_summary: TableDef<MonthlyAttendanceSummary>;
+      member_claim_invites: TableDef<MemberClaimInvite>;
       academy_courses: TableDef<AcademyCourse>;
       academy_modules: TableDef<AcademyModule>;
       academy_lessons: TableDef<AcademyLesson>;

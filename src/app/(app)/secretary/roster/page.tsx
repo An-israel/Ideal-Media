@@ -3,6 +3,9 @@ import { fetchAllRows } from "@/lib/pagination";
 import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RosterTable, UNASSIGNED, type RosterRow } from "./roster-table";
+import { SuggestedUnits } from "./suggested-units";
+import { getSessionRoles } from "@/lib/auth";
+import { getSubunitSuggestions } from "@/lib/subunit-suggestion-queries";
 import type { MemberStatus } from "@/lib/database.types";
 
 export default async function RosterPage() {
@@ -25,10 +28,11 @@ export default async function RosterPage() {
       location: string | null;
       member_origin: string;
       claimed: boolean;
+      access_revoked_at: string | null;
     }>((from, to) =>
       supabase
         .from("profiles")
-        .select("id, full_name, member_status, location, member_origin, claimed")
+        .select("id, full_name, member_status, location, member_origin, claimed, access_revoked_at")
         .order("id")
         .range(from, to)
     ),
@@ -61,6 +65,7 @@ export default async function RosterPage() {
       subunit: primaryOf.get(p.id) ?? UNASSIGNED,
       origin: p.member_origin,
       claimed: p.claimed,
+      archived: p.access_revoked_at !== null,
     }))
     .sort((x, y) => x.name.localeCompare(y.name));
 
@@ -98,8 +103,16 @@ export default async function RosterPage() {
   // Only people still on the roll: somebody who has left or graduated having
   // no subunit is expected, not a job waiting to be done.
   const unassigned = rows.filter(
-    (r) => r.subunit === UNASSIGNED && !["left", "graduated"].includes(r.status)
+    (r) => r.subunit === UNASSIGNED && !r.archived && !["left", "graduated"].includes(r.status)
   ).length;
+
+  // Suggestions read course enrolments with the service role, so the role is
+  // checked here rather than left to the route gate alone.
+  const session = await getSessionRoles();
+  const mayManage =
+    !!session &&
+    (session.roles.includes("secretary") || session.roles.includes("super_admin"));
+  const suggestions = mayManage && unassigned > 0 ? await getSubunitSuggestions() : [];
 
   return (
     <div>
@@ -134,6 +147,8 @@ export default async function RosterPage() {
           </CardContent>
         </Card>
       )}
+
+      <SuggestedUnits suggestions={suggestions} subunits={subunits ?? []} />
 
       <RosterTable rows={rows} subunits={subunits ?? []} />
     </div>

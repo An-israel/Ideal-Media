@@ -10,6 +10,10 @@ import {
   formatWAT,
 } from "@/lib/attendance-window";
 import { formatReportDate } from "@/lib/attendance-report";
+import { sendEmails, type EmailResult } from "@/lib/email";
+
+/** Room for the emails, which are paced to stay inside the provider's rate limit. */
+export const maxDuration = 60;
 
 /**
  * Nudges leaders who still owe an attendance report.
@@ -54,7 +58,8 @@ export async function GET(request: NextRequest) {
     date: a.name === "Sunday Service" ? dates.sunday : dates.wednesday,
   }));
 
-  const sent: { service: string; kind: string; leaders: number }[] = [];
+  const sent: { service: string; kind: string; leaders: number; email: EmailResult }[] = [];
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
 
   for (const service of services) {
     // Which window are we in? Each reminder fires in the hour that follows its
@@ -106,18 +111,23 @@ export async function GET(request: NextRequest) {
     const leaderIds = [...new Set(leaders.map((l) => l.user_id))];
     const reachable =
       leaderIds.length > 0
-        ? await fetchAllRows<{ id: string; member_status: string }>((from, to) =>
+        ? await fetchAllRows<{
+            id: string;
+            member_status: string;
+            email: string;
+            full_name: string;
+          }>((from, to) =>
             admin
               .from("profiles")
-              .select("id, member_status")
+              .select("id, member_status, email, full_name")
               .in("id", leaderIds)
               .is("access_revoked_at", null)
               .range(from, to)
           )
         : [];
-    const recipients = reachable
-      .filter((p) => !["left", "graduated"].includes(p.member_status))
-      .map((p) => p.id);
+    const people = reachable.filter((p) => !["left", "graduated"].includes(p.member_status));
+    const recipients = people.map((p) => p.id);
+    let email: EmailResult = { configured: false, sent: 0, failed: 0 };
     if (recipients.length > 0) {
       const deadline = formatWAT(deadlineFor(service.date));
       await notifyMany(
@@ -132,13 +142,53 @@ export async function GET(request: NextRequest) {
           link: "/attendance",
         }))
       );
+
+      // The same reminder by email, for the leader who has not opened the app
+      // — which is the one it is for. Sent after the notification and never
+      // awaited for success: sendEmails reports failures instead of throwing.
+      const unitsOf = new Map<string, string[]>();
+      for (const l of leaders) {
+        const name = outstanding.find((s) => s.id === l.subunit_id)?.name;
+        if (name) unitsOf.set(l.user_id, [...(unitsOf.get(l.user_id) ?? []), name]);
+      }
+      email = await sendEmails(
+        people.map((p) => {
+          const units = unitsOf.get(p.id) ?? [];
+          return {
+            to: p.email,
+            subject:
+              kind === "morning"
+                ? `${service.name} attendance is due today`
+                : `${service.name} attendance is due in 2 hours`,
+            text: [
+              `Hi ${p.full_name.split(" ")[0]},`,
+              "",
+              `The ${service.name} attendance for ${formatReportDate(service.date)} has not been submitted yet${
+                units.length ? ` for ${units.join(" and ")}` : ""
+              }.`,
+              `It is due by ${deadline} WAT.`,
+              "",
+              appUrl ? `Submit it here: ${appUrl}/attendance` : "Open the Ideal Media site and go to Attendance.",
+              "",
+              "After the deadline it can still be submitted, but it is marked late.",
+              "",
+              "— Ideal Media",
+            ].join("\n"),
+          };
+        })
+      );
     }
 
     await admin
       .from("app_settings")
       .upsert({ key: markerKey, value: JSON.stringify(now.toISOString()) }, { onConflict: "key" });
 
-    sent.push({ service: `${service.name} ${service.date}`, kind, leaders: recipients.length });
+    sent.push({
+      service: `${service.name} ${service.date}`,
+      kind,
+      leaders: recipients.length,
+      email,
+    });
   }
 
   return NextResponse.json({ ok: true, sent });

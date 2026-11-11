@@ -200,3 +200,79 @@ export async function getCourse(
     complete: withContent.length > 0 && withContent.every((m) => m.complete),
   };
 }
+
+export interface AcademySummary {
+  /** Published courses on offer. */
+  available: number;
+  started: number;
+  finished: number;
+  /** The unfinished course they touched most recently, to pick back up. */
+  resume: { slug: string; title: string; done: number; total: number } | null;
+}
+
+/**
+ * The dashboard's view of a member's academy progress.
+ *
+ * Returns null instead of throwing, whatever goes wrong. This runs on the
+ * dashboard — the first page everybody lands on — and the academy tables arrive
+ * with their own migration. A site that redirected every member to the wrong
+ * page because one newer column was missing is the reason nothing on the
+ * dashboard is allowed to depend on the newest feature being installed.
+ */
+export async function getAcademySummary(userId: string): Promise<AcademySummary | null> {
+  try {
+    const admin = createAdminClient();
+    const [courses, progress] = await Promise.all([listCourses(), courseProgressFor(userId)]);
+    if (courses.length === 0) return null;
+
+    const inProgress = courses.filter((c) => {
+      const p = progress.get(c.id);
+      return p && p.done > 0 && !p.complete;
+    });
+
+    let resume: AcademySummary["resume"] = null;
+    if (inProgress.length > 0) {
+      // Most recently ticked lesson decides which course "continue" means.
+      const { data: latest } = await admin
+        .from("academy_lesson_progress")
+        .select("lesson_id")
+        .eq("user_id", userId)
+        .order("completed_at", { ascending: false })
+        .limit(25);
+      const lessonIds = (latest ?? []).map((l) => l.lesson_id);
+      let pick = inProgress[0];
+      if (lessonIds.length > 0) {
+        const { data: lessons } = await admin
+          .from("academy_lessons")
+          .select("id, module_id")
+          .in("id", lessonIds);
+        const moduleIds = [...new Set((lessons ?? []).map((l) => l.module_id))];
+        const { data: modules } = moduleIds.length
+          ? await admin.from("academy_modules").select("id, course_id").in("id", moduleIds)
+          : { data: [] as { id: string; course_id: string }[] };
+        const moduleOf = new Map((lessons ?? []).map((l) => [l.id, l.module_id]));
+        const courseOf = new Map((modules ?? []).map((m) => [m.id, m.course_id]));
+        const open = new Map(inProgress.map((c) => [c.id, c]));
+        for (const id of lessonIds) {
+          const course = open.get(courseOf.get(moduleOf.get(id) ?? "") ?? "");
+          if (course) {
+            pick = course;
+            break;
+          }
+        }
+      }
+      const p = progress.get(pick.id)!;
+      resume = { slug: pick.slug, title: pick.title, done: p.done, total: p.total };
+    }
+
+    return {
+      available: courses.length,
+      started: courses.filter((c) => (progress.get(c.id)?.done ?? 0) > 0).length,
+      finished: courses.filter((c) => progress.get(c.id)?.complete).length,
+      resume,
+    };
+  } catch (e) {
+    console.error("[academy] dashboard summary unavailable:", e);
+    return null;
+  }
+}

@@ -16,6 +16,7 @@ import { GraduationCap, Headphones, Network, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getTrainingForMember } from "@/lib/training";
 import { getCourseInstructors } from "@/lib/course-access";
+import { getAcademySummary } from "@/lib/academy";
 
 export default async function DashboardPage() {
   const session = await getSessionRoles();
@@ -28,6 +29,7 @@ export default async function DashboardPage() {
     { data: enrollments },
     trainingSeries,
     { data: pendingSubunitRequest },
+    academy,
   ] = await Promise.all([
     supabase
       .from("subunit_members")
@@ -48,6 +50,9 @@ export default async function DashboardPage() {
       .eq("user_id", session.userId)
       .eq("status", "pending")
       .maybeSingle(),
+    // Never throws: see getAcademySummary. The dashboard must load whether or
+    // not the academy is installed.
+    getAcademySummary(session.userId),
   ]);
 
   const instructors = await getCourseInstructors(supabase);
@@ -163,6 +168,49 @@ export default async function DashboardPage() {
               </p>
             )}
           </CardContent>
+        </Card>
+      )}
+
+      {/* Skills Academy — open to everyone, so it is offered to everyone. */}
+      {academy && (
+        <Card className="mt-4">
+          <CardHeader className="flex-row items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Skills Academy</CardTitle>
+              <CardDescription>
+                {academy.started === 0
+                  ? `${academy.available} free courses — start any of them today`
+                  : `${academy.started} started${
+                      academy.finished > 0 ? `, ${academy.finished} finished` : ""
+                    } of ${academy.available}`}
+              </CardDescription>
+            </div>
+            <Link href={academy.resume ? `/academy/${academy.resume.slug}` : "/academy"}>
+              <Button size="sm" variant={academy.resume || academy.started === 0 ? "default" : "outline"}>
+                <GraduationCap className="h-4 w-4" />
+                {academy.resume ? "Continue" : academy.started === 0 ? "Browse courses" : "Pick another"}
+              </Button>
+            </Link>
+          </CardHeader>
+          {academy.resume && (
+            <CardContent className="space-y-3">
+              <div className="h-2 overflow-hidden rounded-full bg-[var(--border)]">
+                <div
+                  className="h-full rounded-full bg-[var(--accent)] transition-all"
+                  style={{
+                    width: `${Math.round((academy.resume.done / academy.resume.total) * 100)}%`,
+                  }}
+                />
+              </div>
+              <Link
+                href={`/academy/${academy.resume.slug}`}
+                className="flex items-center gap-2 text-sm text-[var(--accent)] hover:underline"
+              >
+                {academy.resume.title} — {academy.resume.done} of {academy.resume.total} steps
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </CardContent>
+          )}
         </Card>
       )}
 

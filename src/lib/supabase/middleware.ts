@@ -3,7 +3,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/database.types";
 
 /** Public, unauthenticated routes (Section 6: no landing page → /login). */
-const PUBLIC_PATHS = ["/login", "/signup", "/reset-password", "/auth"];
+// /verify is the public certificate check: the person a certificate is shown
+// to has no account, so it must work signed out.
+const PUBLIC_PATHS = ["/login", "/signup", "/reset-password", "/auth", "/verify"];
 
 const ROLE_GATES: { prefix: string; roles: string[] }[] = [
   { prefix: "/admin", roles: ["super_admin"] },

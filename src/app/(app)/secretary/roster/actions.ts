@@ -7,6 +7,8 @@ import { getSessionRoles } from "@/lib/auth";
 import { createUnclaimedMember } from "@/lib/member-admin";
 import { syncWelfareForStatus } from "@/lib/welfare-automation";
 import { MAX_SUBUNITS_PER_MEMBER } from "@/lib/constants";
+import { createClaimInvite, CLAIM_INVITE_DAYS } from "@/lib/claim-invite";
+import { claimInviteMigrations } from "@/lib/schema-check";
 import type { MemberStatus } from "@/lib/database.types";
 
 async function requireSecretary() {
@@ -92,27 +94,28 @@ export interface RemoveMembersResult {
 }
 
 /**
- * Permanently removes members from the system (profile + login + their
- * memberships/attendance via cascade). Destructive — the UI confirms first.
+ * Archives members: they can no longer sign in and drop off every roster and
+ * future report, but nothing about them is deleted.
  *
- * Three fixes (AUDIT ROS-1, SEC-7):
- *   - The `deleteUser` result is checked and reported. It used to be discarded,
- *     so the action returned normally and the UI said "removed" while the member
- *     was still there.
- *   - Deletion actually works now: migration 0011 added ON DELETE clauses to the
- *     five profiles references that had none, which raised a foreign-key
- *     violation for anyone who had ever uploaded a sheet, created a course,
- *     approved a module, decided an application, or been assigned a follow-up.
- *   - Super admins cannot be deleted from here, and a secretary cannot delete
- *     another privileged user. Previously any secretary could permanently
- *     delete the super admin.
+ * This used to call auth.admin.deleteUser, and a profile cascades into ten
+ * tables — so removing one person from the roster also erased their attendance
+ * history, their course and academy progress and their certificates, and
+ * changed the totals of every past report they appeared in. It could not be
+ * undone, and one mis-ticked row was enough. The department's rule is that
+ * nobody is removed, so "remove" now means the same reversible archive the
+ * members-list page uses, and restoreMembers() below is its undo.
+ *
+ * The protections are unchanged:
+ *   - nobody archives themselves;
+ *   - a secretary cannot archive someone holding a privileged role;
+ *   - nobody can archive a super admin from here.
  */
 export async function removeMembers(userIds: string[]): Promise<RemoveMembersResult> {
   const session = await requireSecretary();
   const result: RemoveMembersResult = { removed: 0, failed: [] };
   if (userIds.length === 0) return result;
 
-  // Never let someone delete their own account from here.
+  // Never let someone archive their own account from here.
   const ids = userIds.filter((id) => id !== session.userId);
   if (ids.length === 0) return result;
 
@@ -134,12 +137,12 @@ export async function removeMembers(userIds: string[]): Promise<RemoveMembersRes
     const name = nameById.get(id) ?? id;
     const theirRoles = rolesByUser.get(id) ?? [];
 
-    // A super admin account is never deletable through the roster.
+    // A super admin account is never archived through the roster.
     if (theirRoles.includes("super_admin")) {
       result.failed.push({
         userId: id,
         name,
-        reason: "super admins cannot be removed from the roster",
+        reason: "super admins cannot be archived from the roster",
       });
       continue;
     }
@@ -151,16 +154,33 @@ export async function removeMembers(userIds: string[]): Promise<RemoveMembersRes
       result.failed.push({
         userId: id,
         name,
-        reason: `holds the ${theirRoles.join("/")} role — a super admin must remove them`,
+        reason: `holds the ${theirRoles.join("/")} role — a super admin must archive them`,
       });
       continue;
     }
 
-    const { error } = await admin.auth.admin.deleteUser(id);
+    const { error } = await admin
+      .from("profiles")
+      .update({
+        access_revoked_at: new Date().toISOString(),
+        access_revoked_by: session.userId,
+        access_revoked_reason: "Archived from the roster",
+      })
+      .eq("id", id);
     if (error) {
-      console.error(`[roster] could not delete member ${id}:`, error.message);
+      console.error(`[roster] could not archive member ${id}:`, error.message);
       result.failed.push({ userId: id, name, reason: error.message });
       continue;
+    }
+    // Block sign-in too. The profile flag already turns them away at the app
+    // layout and switches off their own-row policies; the ban stops a session
+    // being issued at all. A failure here leaves them archived, which is the
+    // part that matters, so it is reported rather than rolled back.
+    const { error: banErr } = await admin.auth.admin.updateUserById(id, {
+      ban_duration: "876000h",
+    });
+    if (banErr) {
+      console.error(`[roster] archived ${id} but could not block sign-in:`, banErr.message);
     }
     result.removed++;
   }
@@ -169,6 +189,87 @@ export async function removeMembers(userIds: string[]): Promise<RemoveMembersRes
   revalidatePath("/secretary");
   revalidatePath("/welfare");
   revalidatePath("/admin/members");
+  return result;
+}
+
+/**
+ * Makes a claim link for one unclaimed member.
+ *
+ * Returns the token, not a full address: the page that asked knows what site
+ * it is on, and building the link there means it is right on a preview
+ * deployment as well as the live one.
+ */
+export async function createClaimLink(
+  userId: string
+): Promise<{ ok: true; token: string; name: string; days: number } | { ok: false; error: string }> {
+  try {
+    const session = await requireSecretary();
+    const needs = await claimInviteMigrations();
+    if (needs.length > 0) {
+      return {
+        ok: false,
+        error: `Claim links need one more database step: run ${needs[0].file} in the Supabase SQL editor.`,
+      };
+    }
+
+    const admin = createAdminClient();
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("id, full_name, claimed")
+      .eq("id", userId)
+      .maybeSingle();
+    if (!profile) return { ok: false, error: "That member no longer exists." };
+    if (profile.claimed) {
+      return {
+        ok: false,
+        error: `${profile.full_name} already has a working account, so there is nothing to claim.`,
+      };
+    }
+
+    const token = await createClaimInvite(profile.id, session.userId);
+    return { ok: true, token, name: profile.full_name, days: CLAIM_INVITE_DAYS };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Could not make the link." };
+  }
+}
+
+/** Puts archived members back: access, sign-in and their place on the roll. */
+export async function restoreMembers(userIds: string[]): Promise<RemoveMembersResult> {
+  await requireSecretary();
+  const result: RemoveMembersResult = { removed: 0, failed: [] };
+  if (userIds.length === 0) return result;
+
+  const admin = createAdminClient();
+  const { data: profiles } = await admin.from("profiles").select("id, full_name").in("id", userIds);
+
+  for (const p of profiles ?? []) {
+    const { error } = await admin
+      .from("profiles")
+      .update({ access_revoked_at: null, access_revoked_by: null, access_revoked_reason: null })
+      .eq("id", p.id);
+    if (error) {
+      result.failed.push({ userId: p.id, name: p.full_name, reason: error.message });
+      continue;
+    }
+    const { error: banErr } = await admin.auth.admin.updateUserById(p.id, {
+      ban_duration: "none",
+    });
+    if (banErr) {
+      result.failed.push({
+        userId: p.id,
+        name: p.full_name,
+        reason: `restored, but sign-in is still blocked: ${banErr.message}`,
+      });
+      continue;
+    }
+    result.removed++;
+  }
+
+  revalidatePath("/secretary/roster");
+  revalidatePath("/secretary");
+  revalidatePath("/admin/members");
+  revalidatePath("/admin/roster-sync");
+  revalidatePath("/attendance");
   return result;
 }
 

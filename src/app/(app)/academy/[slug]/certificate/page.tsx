@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { ArrowLeft } from "lucide-react";
 import { getSessionRoles } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -41,6 +42,12 @@ export default async function CertificatePage({
   // No certificate means it has not been earned. There is nothing to show, and
   // a placeholder would be a certificate that says nothing was achieved.
   if (!certificate) notFound();
+
+  // Printed on the certificate, so that the paper copy says where to check it.
+  const h = await headers();
+  const verifyHost = (
+    process.env.NEXT_PUBLIC_APP_URL || `https://${h.get("host") ?? "ideal-media.vercel.app"}`
+  ).replace(/^https?:\/\//, "").replace(/\/$/, "");
 
   const issued = new Date(certificate.issued_at).toLocaleDateString("en-GB", {
     day: "numeric",
@@ -91,10 +98,17 @@ export default async function CertificatePage({
           <span>Issued {issued}</span>
           <span className="font-mono">{certificate.code}</span>
         </div>
+        <p className="mt-3 text-[10px] text-[var(--text-muted)] print:text-black">
+          Verify this certificate at {verifyHost}/verify
+        </p>
       </div>
 
       <p className="mx-auto mt-4 max-w-3xl text-center text-xs text-[var(--text-muted)] print:hidden">
-        The certificate number can be checked against the department&apos;s records.
+        Anyone can confirm this certificate by entering its number at{" "}
+        <Link href={`/verify?code=${certificate.code}`} className="underline">
+          the certificate check page
+        </Link>
+        .
       </p>
     </div>
   );

@@ -29,7 +29,7 @@ export default async function RosterSyncPage() {
       <div>
         <PageHeader
           title="Members list"
-          description="Reconcile the site against the official media members list."
+          description="Add members from a list, and put removed members back."
         />
         <MigrationNotice needs={needs} />
       </div>
@@ -55,7 +55,7 @@ export default async function RosterSyncPage() {
     <div>
       <PageHeader
         title="Members list"
-        description="Reconcile the site against the official media members list. Nothing changes until you approve it."
+        description="Add members from a list, put removed members back, and create accounts for people on a subunit sheet. Nothing here removes anyone."
       />
       <RosterSyncFlow
         alreadyRevoked={revoked.map((r) => ({
