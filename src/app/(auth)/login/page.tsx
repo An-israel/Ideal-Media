@@ -86,9 +86,15 @@ function LoginInner() {
           </Button>
         </form>
         <p className="mt-6 text-center text-sm text-[var(--text-muted)]">
-          Don&apos;t have an account?{" "}
+          In the media department and no account yet?{" "}
           <Link href="/signup" className="text-[var(--accent)] hover:underline">
             Sign up
+          </Link>
+        </p>
+        <p className="mt-2 text-center text-sm text-[var(--text-muted)]">
+          Here for the free courses?{" "}
+          <Link href="/learn/signup" className="text-[var(--accent)] hover:underline">
+            Join the Skills Academy
           </Link>
         </p>
       </CardContent>

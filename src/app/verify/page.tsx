@@ -130,11 +130,25 @@ async function lookup(code: string) {
       admin.from("profiles").select("full_name").eq("id", cert.user_id).maybeSingle(),
       admin.from("academy_courses").select("title").eq("id", cert.course_id).maybeSingle(),
     ]);
-    if (!profile || !course) return null;
+    if (!course) return null;
+
+    // A department member's name is on their profile; a course-only learner
+    // has no profile, so theirs is on the learner row. A learner whose account
+    // has been paused does not have a certificate that verifies.
+    let name = profile?.full_name ?? null;
+    if (!name) {
+      const { data: learner } = await admin
+        .from("learners")
+        .select("full_name, suspended_at")
+        .eq("id", cert.user_id)
+        .maybeSingle();
+      if (!learner || learner.suspended_at) return null;
+      name = learner.full_name;
+    }
 
     return {
       code: cert.code,
-      name: profile.full_name,
+      name,
       course: course.title,
       issued: new Date(cert.issued_at).toLocaleDateString("en-GB", {
         day: "numeric",

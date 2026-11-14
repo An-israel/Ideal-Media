@@ -1,0 +1,160 @@
+# course | lesson | track | youtube_id | title     (first line per lesson+track = main video, rest = backups)
+motion-graphics|2.1|laptop|mKvYoLU1gIo|Animate Shape Layers in After Effects - AE Fundamentals
+motion-graphics|2.1|laptop|0ny9awuzXJA|After Effects Motion Graphics: Shape Animations Beginner Course
+motion-graphics|2.1|laptop|7tVt1jvuTkA|Shape Animation After Effects, Beginner's Tutorial
+motion-graphics|4.2|phone|idBQvDAjSTg|Make Trendy Animated Lower Thirds In Alight Motion - Tutorial
+motion-graphics|4.2|phone|hnf5MPWCvYU|Alight Motion Lower Third Animation (Dope Motion Inspired)
+motion-graphics|4.2|phone|rIICcyAVDgo|How To Make Lower Third On Android
+motion-graphics|4.3|phone|SCxl3s6ahRg|How to Export a Video with a Transparent Background in Alight Motion
+motion-graphics|4.3|phone|WRIqkTDPcCU|How To Export Transparent Video in Alight Motion
+motion-graphics|4.3|laptop|-s2dWOao2YU|Export Transparent Background in After Effects (Easy Method)
+motion-graphics|4.3|laptop|q4lhAk4frBw|Export as GIF with Transparent Background in After Effects
+photo-editing|2.3|laptop|J-hAJANxJao|How to Create Presets in Lightroom Classic
+photo-editing|2.3|laptop|zs1c2OCAteI|How to Create Presets in Lightroom Classic with Julieanne Kost
+photo-editing|2.3|laptop|He_AvKaCPI4|How To Create Your Own Custom Presets In Lightroom Classic
+photo-editing|4.2|laptop|qKx2SzHHtE8|How to Retouch Product Photos - Basic Photoshop Product Retouching Tutorial
+photo-editing|4.2|laptop|-9QODH_7m7E|Product Photography Retouching Crash Course
+photo-editing|4.2|laptop|hzq0pkbCGJs|How to Edit Product Photos for E-Commerce - Photoshop Tutorial
+photo-editing|4.3|any|-10ZaBSlfpw|Beginner Guide to Photo Editing (Start to Finish)
+photo-editing|4.3|any|fvQ-goig21o|How to Edit Photos Like a Professional - Start to Finish
+photo-editing|4.3|any|AX19LCBQhy8|Full Photo Editing Tutorial from Start to Finish in Photoshop for Beginners
+ui-ux-design|4.2|any|PiyrpfCD2-E|Usability Testing 101! Learn the Basics
+ui-ux-design|4.2|any|xuq4mTh50p4|How to Conduct Usability Testing (Step by Step)
+ui-ux-design|4.2|any|EYUL0N1Fjhg|Easy Usability Testing Guide with Example (Remote & In Person)
+ai-automation|4.1|any|iny91JqJGfg|Don't Build Another n8n Workflow Until You Know These 4 Patterns
+ai-automation|4.1|any|1yZq4uEtm-k|The Ultimate Guide to Building Production-Ready n8n Workflows
+ai-automation|4.2|any|0BzaIm7Fwyo|Build Your First Workflow (n8n)
+ai-automation|4.2|any|3_Wjo2n2ytM|Build Your First n8n Workflow with Google Sheets and Gmail
+ai-automation|4.2|any|B9dk4bmO_QA|n8n Quick Start: Build Your First Workflow Without Code
+ai-content-creation|3.2|any|_eG9v9ncOS4|Editing Your AI Movie with CapCut
+ai-content-creation|3.2|any|0srQ-uZcxL0|Edit a UGC Video With Me in CapCut in Under 2 Minutes
+ai-content-creation|3.2|any|lLMAmJb0iTA|AI Does It All! Complete Video Editing Workflow in CapCut
+ai-content-creation|4.2|any|tJL8FykRCng|Use This Weekly Social Media Content Plan (and Save Tons of Time)
+ai-content-creation|4.2|any|X90-V31Arnk|Social Media Content Planning: How We Plan a Week of Posts in 1 Hour
+ai-content-creation|4.2|any|-yH-bdDPIqw|How to Plan 1 Week of Social Media Content in 30 Minutes
+ai-content-creation|4.3|any|BVj8Pn_E9Bw|How to Read Your Social Media Analytics (and Actually Use Them)
+ai-content-creation|4.3|any|4YZ4bFOuXXs|How to Analyze Instagram Insights - Full Guide
+prompt-engineering|2.3|any|ZE3kXIIOdLg|How to Use Table Format Prompts in ChatGPT for Clearer Output
+prompt-engineering|2.3|any|RXsu6BK3cY8|Controlling the Formatting Output in ChatGPT
+prompt-engineering|2.3|any|tjiWxnvB5fY|How to Make ChatGPT Use Bullet Points
+prompt-engineering|3.2|any|36L9IWyAAa0|Learn Anything Faster with ChatGPT (+12 Advanced Prompts for Studying)
+prompt-engineering|3.2|any|bIgg91Mqd-k|Learn Anything Faster With ChatGPT (5 ChatGPT Prompts For Studying)
+prompt-engineering|3.2|any|CMUx3B_dnqI|How To Learn Anything Faster With ChatGPT
+prompt-engineering|4.3|any|uDIW34h8cmM|Prompt Engineering Guide - From Beginner to Advanced
+prompt-engineering|4.3|any|dIAntC0iqvc|5 Prompt Engineering Techniques Every Beginner Should Know
+prompt-engineering|4.3|any|aOm75o2Z5-o|Prompt Engineering 101 - Crash Course & Tips
+python-programming|1.2|any|abpivu3ujlQ|Python Variables & Data Types Explained for Beginners
+python-programming|1.2|any|LwaqTBA41os|Basics Data Types And Variables For Python Beginners
+python-programming|1.2|any|A_nvMYh_W10|Python Tutorial for Beginners (Part 2) - Data Types, Variables, and User Input
+python-programming|2.2|any|WPF5M_Ic6Fc|For Loops & While Loops in Python - Beginner Python Tutorial (with Exercises)
+python-programming|2.2|any|26VtIlzEcmU|While Loop and For Loops in Python
+python-programming|2.2|any|Xmt_0M7j0BE|Python Loops: For Loops, While Loops - A Beginner's Tutorial
+web-development|2.1|any|wRNinF7YQqQ|Learn CSS in 1 Hour
+web-development|2.1|any|qoNSnSErLJQ|The Ultimate CSS Tutorial For Beginners (Made Simple)
+web-development|2.1|any|0W6qz0-aDaM|CSS Introduction and Tutorial for Beginners
+web-development|2.2|any|wsTv9y931o8|Learn CSS Flexbox in 20 Minutes (Course)
+web-development|2.2|any|GteJWhCikCk|Learn CSS Flexbox in 10 Minutes
+web-development|2.2|any|Kxrc2bUWRYM|Learn Flexbox in 24 Minutes
+web-development|4.2|any|kMT54MPz9oE|HTML and CSS Tutorial - Create a Website for Beginners
+web-development|4.2|any|LhZJKLDgi78|Learn HTML & CSS for Beginners - Build Your First Website Step-by-Step
+web-development|4.2|any|zMTId2CUClw|Create a Basic Website with HTML & CSS
+web-development|4.3|any|moJL1pvpE_0|How to Test Mobile Websites Without a Phone (Chrome DevTools Device Mode)
+web-development|4.3|any|IE_c29GzcRw|Testing Mobile and Responsive Designs
+web-development|4.3|any|9LTbTfWBtKc|How to Check your Website on Mobile Devices using Chrome DevTools
+excel-data-analysis|2.2|any|tPaXEZRh9_k|How to use the XLOOKUP Function in Microsoft Excel - Beginners Tutorial
+excel-data-analysis|2.2|any|Hr9wzW7WAQE|XLOOKUP in Excel for Beginners
+excel-data-analysis|2.2|any|8o3vxUyMTVY|How To Use XLOOKUP for Beginners (with Practice Worksheet)
+excel-data-analysis|4.1|any|_3TEs_XsfSg|Excel Charts Guide: How to Choose the Right Chart Type
+excel-data-analysis|4.1|any|Fu-5ZQaQpmY|How to Choose the Most Suitable Chart Type in Excel
+excel-data-analysis|4.1|any|384rHQfj0Ok|Excel Charts & Graphs Tutorial for Beginners
+excel-data-analysis|4.2|any|8VyKSn4Xuk0|Excel Dashboard Tutorial for Beginners
+excel-data-analysis|4.2|any|NniBSaseAgw|Excel Dashboard for Beginners
+excel-data-analysis|4.2|any|KrwX2SkFnXY|How to Build an Interactive Excel Dashboard (Step-by-Step)
+cybersecurity|3.1|any|cDvFxPPg8Yo|How to Spot a Phishing Email Explained Simply for Beginners
+cybersecurity|3.1|any|xvN3IZww91I|How to Spot Spam/Phishing Emails and Protect Yourself From Them
+cybersecurity|3.1|any|FoA5WcpN1UU|How To Spot a Phishing Email
+cybersecurity|3.2|any|uvKTMgWRPw4|What is Social Engineering?
+cybersecurity|3.2|any|0JJbS4Ly9Og|SANS Security Awareness: Social Engineering
+cybersecurity|3.2|any|QUBX12OS_zI|Social Engineering Fundamentals: How "Human Hacking" Works
+cybersecurity|4.1|any|LFp1DDRHXMw|How to Secure Your Phone Right Now - 5 Essential Settings
+cybersecurity|4.1|any|51vpjpD_mOw|Do This Now To Secure Your Android Or iPhone
+cybersecurity|4.1|any|b4y6Z63zJCY|Android Security Lesson 1: Change These Settings Now
+cybersecurity|4.2|any|ugRqQ9zTMvM|How to Stay Safe on Public Wi-Fi
+cybersecurity|4.2|any|98iXYa3CsEE|How Do I Use an Open Wi-Fi Hotspot Safely?
+cybersecurity|4.2|any|GLnjUtDMjOI|How Dangerous is Public Wi-Fi?
+cybersecurity|4.3|any|4Sh3ef5c57o|3-2-1 Backup Rule Explained
+cybersecurity|4.3|any|FheYEyLVj1Y|What is 3-2-1 Backup & Why is it Important?
+cybersecurity|4.3|any|ji0SQzpOlBw|How To Make A 3-2-1 Backup System
+public-speaking|2.2|any|4bwDr7WVBwo|How to Organize a Speech or Presentation
+public-speaking|2.2|any|Q4K0SnRlik0|How to Structure a Speech
+public-speaking|2.2|any|yBuTJo6_J-Y|Speech Structure - How to Properly Structure Your Speech
+public-speaking|3.3|any|9N9qOCJxuGs|Pro Tip: How to Use Eye Contact in Public Speaking or Presentations
+public-speaking|3.3|any|IVFm4I5e2uk|2 Simple Keys for Improving Eye Contact while Public Speaking
+public-speaking|3.3|any|C2vLgFCmd1s|Public Speaking Tip: How to Make Eye Contact with Your Audience
+public-speaking|4.1|any|i5Q3v9EcN9E|Quick Fixes To Improve Church Announcements
+public-speaking|4.1|any|xXI0c34KLyA|Transform Boring Church Announcements (Real Examples)
+public-speaking|4.1|any|sPzR5PwwGuY|Church Announcements Formula
+public-speaking|4.2|any|PS90YsHjAU4|How to Deal with Questions During a Presentation
+public-speaking|4.2|any|HG1rw-obHDc|How to Answer Difficult Questions
+public-speaking|4.2|any|b4kLTqbxVUU|How to Answer Questions in a Presentation
+copywriting-content-writing|2.2|any|N5lE-iH3kPc|Write Great Copy With The AIDA Copywriting Formula
+copywriting-content-writing|2.2|any|EitzzM1Pbeo|PAS Copywriting Formula Tutorial and Explanation
+copywriting-content-writing|2.2|any|8YWbVJNmsq8|The AIDA Model: How To Use This Copywriting Formula
+copywriting-content-writing|3.2|any|5xMn6blbD8U|How to Use Storytelling in Your Copywriting
+copywriting-content-writing|3.2|any|l1SZVvuGyBs|Copywriting And Storytelling 101
+copywriting-content-writing|3.2|any|YaOZyJ9ZDQM|4 Storytelling Formulas To Create Content That Sells
+copywriting-content-writing|3.3|any|vktaMWk4vOs|Copy Editing Tips for Beginners
+copywriting-content-writing|3.3|any|vLMwtObYZrs|9 Self-Editing Tips For Writers
+copywriting-content-writing|3.3|any|G1Saffgm1Mo|Self Editing Tips Every Writer Should Know
+copywriting-content-writing|4.2|any|p4Oqt47d72E|Daily Copywriting Exercises to 10x Your Writing Skills
+copywriting-content-writing|4.2|any|fkdsF6LgMXU|Copywriting Exercises For Beginners: Do These 9 Things
+copywriting-content-writing|4.2|any|9sxINAQ25PY|9 Copywriting Exercises You Can Start Doing Now
+copywriting-content-writing|4.3|any|C8UkQGJuuhU|How To Build A Copywriting Portfolio From Scratch (Step by Step)
+copywriting-content-writing|4.3|any|sf2H_ITom6Q|Build A Copywriting Portfolio: For Beginners With No Experience
+copywriting-content-writing|4.3|any|GloQaVu-CEI|Start a Copywriting Portfolio from Scratch with No Experience
+social-media-marketing|2.3|any|vhsScnDXKJQ|How to Batch Content for Your Social Media
+social-media-marketing|2.3|any|J_WbmeHnbSQ|How to Use Canva to Batch Create Your Social Media Graphics
+social-media-marketing|2.3|any|mCp4Mx5B_oE|Batching A Week of Social Media Content
+social-media-marketing|3.1|any|iizK1buYKag|Canva 101: The Beginner's Guide to Social Media Design
+social-media-marketing|3.1|any|LolqPo-IMAQ|How to Design Social Media Posts in Canva (Beginner Tutorial)
+social-media-marketing|3.1|any|IYc1bZi2lPE|Create Stunning Social Media Posts in Canva (Step-by-Step)
+social-media-marketing|4.2|any|pYdPmGM873I|Planning a Social Media Campaign
+social-media-marketing|4.2|any|DseyWK073tY|How to Create a Winning Social Media Campaign Plan
+social-media-marketing|4.2|any|ONnqTFj_CqI|How to Run a Social Media Campaign
+freelancing-getting-clients|4.1|any|wmH42LPYqFo|How to Price Your Freelancing Services
+freelancing-getting-clients|4.1|any|h5UC8sHXvko|Freelance Pricing Strategies: How to Charge What You're Worth
+freelancing-getting-clients|4.1|any|ByzdX1QIY6M|How To Price Your Work - Hourly or Fixed Rate?
+freelancing-getting-clients|4.2|any|qUycFaWlAdA|6 Essentials You Must Include In Your Freelance Contract
+freelancing-getting-clients|4.2|any|UjveBc9AnfU|Contract Basics for Freelancers
+freelancing-getting-clients|4.2|any|QTeokgrR--o|How to Send Contracts & Invoices as a Freelancer
+freelancing-getting-clients|4.3|any|FJpS8MON__4|When and How to Follow Up with Freelance Clients to Get More Work
+freelancing-getting-clients|4.3|any|6imdCnGXMdY|Every Step Of Working With A Freelance Client
+freelancing-getting-clients|4.3|any|gtoSFsS5CxU|Freelancing Tips: Communicating with Clients
+financial-analysis|3.1|any|JYOwJhknEsQ|The Best Beginner's Guide to the Balance Sheet
+financial-analysis|3.1|any|CMv1zlZhb4Q|The Balance Sheet for Beginners (Full Example)
+financial-analysis|3.1|any|PQImMpnzlh4|What Is a Balance Sheet?
+financial-analysis|3.3|any|CE9HnV3b_jY|The 3 Financial Statements Explained: How They Connect
+financial-analysis|3.3|any|Mcj5ES2HDqY|How the Three Financial Statements Fit Together
+financial-analysis|3.3|any|AXBuC2gi1N0|How the 3 Financial Statements Link Together
+financial-analysis|4.1|any|3W_LwpeG8c8|Financial Ratios: How to Analyze Financial Statements
+financial-analysis|4.1|any|6YlY1OgaSgg|Financial Ratios Explained
+financial-analysis|4.1|any|u8DLn1k3Njc|9 Essential Financial Ratios Every Investor Must Know
+ghost-writing|3.1|any|tq5sY6pGg_E|Ghostwriting for Beginners
+ghost-writing|3.1|any|4jmtULwbFO8|What Is Premium Ghostwriting? (Free 5-Step Crash Course)
+ghost-writing|4.3|any|qTV5w_5pxjc|Freelance Ghostwriting Rates
+ghost-writing|4.3|any|CVa-X5HOcVw|How Much Should I Charge To Ghostwrite A Book?
+ghost-writing|4.3|any|ZR6XhFjzjJo|What Does It Cost to Work with a Ghostwriter?
+personal-branding-growing-a-page|2.1|any|97VnVYVc99I|Optimize Your Instagram Profile and Bio for Growth
+personal-branding-growing-a-page|2.1|any|9lr9FfOzyqA|How to Optimize Your Instagram Bio: Tips to Boost Your Profile
+personal-branding-growing-a-page|2.1|any|4F1v53V9tDc|How to Optimize Your Instagram Bio - Full Guide
+personal-branding-growing-a-page|2.2|any|JLgCifh8xAg|A Beginner's Guide to Visual Branding
+personal-branding-growing-a-page|2.2|any|-z9T8Kf1Sc0|More Than a Logo: DIY a Full Visual Brand (Colours, Fonts and Brand Elements)
+personal-branding-growing-a-page|2.2|any|qnMYQiN-p_A|How to Create a Brand Color Palette
+personal-branding-growing-a-page|2.3|any|FZmml29zDAQ|Your First Nine Posts on Social Media
+personal-branding-growing-a-page|2.3|any|y64Vs_4f0_Y|What to Make Your First Instagram Post on a New Account
+personal-branding-growing-a-page|2.3|any|Q-8VV547B8E|Creative First Post Ideas to Introduce Your Business on Instagram
+personal-branding-growing-a-page|4.3|any|Ndp476KTYxI|How to Use Instagram Insights (Understand Your Analytics Fast)
+personal-branding-growing-a-page|4.3|any|CTdDt5YUPqo|Instagram Insights Explained
+personal-branding-growing-a-page|4.3|any|uIiqIBNHzFw|How to Use Instagram Insights for Growth (Complete Walkthrough)
+ai-content-creation|4.1|any|eea_h19WF00|How to Create 30 Days of Content in Under 60 Minutes Using AI (Claude + Canva)
+ai-content-creation|4.1|any|vpyHESvLVfk|Stop Generating AI Images 1-by-1: Full Automation Workflow

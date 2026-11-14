@@ -75,6 +75,15 @@ export async function claimInviteMigrations(): Promise<MigrationNeed[]> {
   return needs;
 }
 
+/** Migrations course-only learner accounts depend on. */
+export async function learnerMigrations(): Promise<MigrationNeed[]> {
+  const needs: MigrationNeed[] = [];
+  if (!(await columnExists("learners", "full_name"))) {
+    needs.push({ file: "0020_course_learners.sql", feature: "course-only learner accounts" });
+  }
+  return needs;
+}
+
 /** Migrations the members-list and subunit tools depend on. */
 export async function memberAccessMigrations(): Promise<MigrationNeed[]> {
   const needs: MigrationNeed[] = [];

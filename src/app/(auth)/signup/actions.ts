@@ -310,6 +310,23 @@ export async function signUpAction(input: SignupInput): Promise<SignupResult> {
   }
 
   // ---- Brand-new member ----
+  // The email may already be a course-only learner's. Supabase would refuse it
+  // with a bare "already registered", which tells nobody what to do. Turning a
+  // learner into a department member is a decision for the department, not
+  // something a sign-up form should do on its own, so it is sent to them.
+  const { data: learner, error: learnerErr } = await admin
+    .from("learners")
+    .select("id")
+    .ilike("email", lowerEmail)
+    .maybeSingle();
+  if (!learnerErr && learner) {
+    return {
+      ok: false,
+      error:
+        "This email is registered for the Skills Academy courses only. To join the media department with it, please speak to the media secretary.",
+    };
+  }
+
   const mustConfirm = requireEmailConfirmation();
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
     email: lowerEmail,

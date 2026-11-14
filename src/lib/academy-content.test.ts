@@ -126,6 +126,27 @@ describe("the academy content that ships with the app", () => {
     }
   });
 
+  it("never plays the same video as the main video of two lessons in one course", () => {
+    // Members reported the same video coming up lesson after lesson in Motion
+    // Graphics. It was 54 lessons across 17 courses: the source documents had
+    // reused one video for several lessons. Backups may overlap; the video a
+    // lesson actually opens with may not.
+    for (const c of courses) {
+      const seen = new Map<string, string>();
+      for (const m of c.modules) {
+        for (const l of m.lessons) {
+          for (const [track, list] of Object.entries(l.videos ?? {})) {
+            if (!list?.length) continue;
+            const id = list[0].youtube_id;
+            const here = `${m.position}.${l.position} ${track}`;
+            expect(seen.get(id), `${c.slug} ${here} repeats ${seen.get(id)}`).toBeUndefined();
+            seen.set(id, here);
+          }
+        }
+      }
+    }
+  });
+
   it("only uses assignment kinds the database enum accepts", () => {
     for (const c of courses) {
       for (const m of c.modules) {

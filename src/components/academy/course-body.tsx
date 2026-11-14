@@ -13,7 +13,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { videosFor, isDualLesson, type ModuleWithContent } from "@/lib/academy-content";
-import { setLessonDone, submitAssignment, claimCertificate } from "../actions";
+import { setLessonDone, submitAssignment, claimCertificate } from "@/app/(app)/academy/actions";
 import { toast } from "@/components/ui/toaster";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 type Device = "phone" | "laptop";
 
 export function CourseBody({
+  basePath = "/academy",
   courseId,
   courseSlug,
   courseTitle,
@@ -34,6 +35,8 @@ export function CourseBody({
   complete,
   certificate,
 }: {
+  /** "/academy" inside the department's app, "/learn" for course-only learners. */
+  basePath?: string;
   courseId: string;
   courseSlug: string;
   courseTitle: string;
@@ -111,6 +114,7 @@ export function CourseBody({
       </div>
 
       <CertificateCard
+        basePath={basePath}
         courseId={courseId}
         courseSlug={courseSlug}
         courseTitle={courseTitle}
@@ -382,12 +386,14 @@ function AssignmentRow({
 }
 
 function CertificateCard({
+  basePath,
   courseId,
   courseSlug,
   courseTitle,
   complete,
   certificate,
 }: {
+  basePath: string;
   courseId: string;
   courseSlug: string;
   courseTitle: string;
@@ -424,7 +430,7 @@ function CertificateCard({
             <p className="text-sm">
               Certificate <span className="font-mono font-medium">{code}</span>
             </p>
-            <a href={`/academy/${courseSlug}/certificate`}>
+            <a href={`${basePath}/${courseSlug}/certificate`}>
               <Button size="sm" variant="outline">
                 View certificate
               </Button>

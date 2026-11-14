@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "node:crypto";
-import { getSessionRoles } from "@/lib/auth";
+import { getAcademyUserState } from "@/lib/academy-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -13,11 +13,17 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * must never be able to say whose lesson it is.
  */
 
+/**
+ * A member of the department or a course-only learner — the academy is the
+ * one part of the site both may use. The result carries `userId` under the
+ * same name the session did, so every action below reads exactly as before.
+ */
 async function requireMember() {
-  const session = await getSessionRoles();
-  if (!session) throw new Error("Not signed in.");
-  if (session.accessRevoked) throw new Error("Your access has been removed.");
-  return session;
+  const state = await getAcademyUserState();
+  if (state.status === "ok") return state.user;
+  if (state.status === "learner-suspended") throw new Error("Your access to the courses has been suspended.");
+  if (state.status === "member-blocked") throw new Error("Your access has been removed.");
+  throw new Error("Not signed in.");
 }
 
 export async function setLessonDone(lessonId: string, done: boolean) {
@@ -41,6 +47,7 @@ export async function setLessonDone(lessonId: string, done: boolean) {
     if (error) throw new Error(error.message);
   }
   revalidatePath("/academy", "layout");
+  revalidatePath("/learn", "layout");
 }
 
 export async function submitAssignment(
@@ -104,6 +111,7 @@ export async function submitAssignment(
   }
 
   revalidatePath("/academy", "layout");
+  revalidatePath("/learn", "layout");
 }
 
 /**
@@ -157,5 +165,6 @@ export async function claimCertificate(courseId: string): Promise<{ code: string
   }
 
   revalidatePath("/academy", "layout");
+  revalidatePath("/learn", "layout");
   return { code };
 }

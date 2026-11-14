@@ -1,11 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/database.types";
+import { learnRedirect } from "@/lib/learn-routing";
 
 /** Public, unauthenticated routes (Section 6: no landing page → /login). */
 // /verify is the public certificate check: the person a certificate is shown
 // to has no account, so it must work signed out.
-const PUBLIC_PATHS = ["/login", "/signup", "/reset-password", "/auth", "/verify"];
+// /learn/signup is where course-only learners register, so it is open too.
+const PUBLIC_PATHS = ["/login", "/signup", "/reset-password", "/auth", "/verify", "/learn/signup"];
 
 const ROLE_GATES: { prefix: string; roles: string[] }[] = [
   { prefix: "/admin", roles: ["super_admin"] },
@@ -51,8 +53,9 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Authenticated on an auth page → send to dashboard.
-  if (path === "/login" || path === "/signup") {
+  // Authenticated on an auth page → send to dashboard (which, for a learner,
+  // is turned into /learn just below).
+  if (path === "/login" || path === "/signup" || path === "/learn/signup") {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
@@ -65,7 +68,34 @@ export async function updateSession(request: NextRequest) {
     .from("profiles")
     .select("coc_completed")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
+
+  // Course-only learners have a login but no profile. They belong in /learn
+  // and nowhere else: not the dashboard, not the Code of Conduct (which is the
+  // department's), not any screen that reads or writes the department's
+  // records. Members, in turn, have the academy inside the main app, so /learn
+  // sends them to the same page there. The rule itself is learnRedirect(),
+  // which is tested. A failed lookup (the table not created yet) reads as
+  // "not a learner", which is the old behaviour.
+  let kind: "learner" | "member" | "neither" = profile ? "member" : "neither";
+  if (!profile) {
+    const { data: learner } = await supabase
+      .from("learners")
+      .select("id")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (learner) kind = "learner";
+  }
+  const learnTarget = learnRedirect(path, kind);
+  if (learnTarget) {
+    const url = request.nextUrl.clone();
+    url.pathname = learnTarget;
+    if (kind === "learner") url.search = "";
+    return NextResponse.redirect(url);
+  }
+  // A learner who is where they belong goes no further: the Code of Conduct
+  // and role checks below are the department's, and a learner has neither.
+  if (kind === "learner") return response;
 
   // /access-removed is exempt as well as /coc. Without that, somebody whose
   // access was removed before they ever took the quiz could never reach the

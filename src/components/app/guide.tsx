@@ -82,6 +82,7 @@ function sectionsFor(roles: Role[]): Section[] {
         "**Subunits, Activities, Code of Conduct, Overview** all live here.",
         "**Members list** — put removed members back, and create accounts for people who are on a subunit sheet but not yet on the site.",
         "**Skills Academy** — load or refresh the academy's courses. Safe to press again; nobody's progress is lost.",
+        "**Course learners** 🎓 — people outside the department who joined only for the courses at /learn/signup. They never appear in the roster, attendance or reports. You can see their progress here and **Pause** anyone who misuses it.",
       ],
     });
   return sections;

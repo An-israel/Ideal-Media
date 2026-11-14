@@ -8,9 +8,11 @@ import { cn } from "@/lib/utils";
  * survives opening a course and pressing back, and can be shared.
  */
 export function CategoryFilter({
+  basePath = "/academy",
   categories,
   active,
 }: {
+  basePath?: string;
   categories: string[];
   active: string | null;
 }) {
@@ -32,9 +34,9 @@ export function CategoryFilter({
 
   return (
     <div className="mb-6 flex gap-2 overflow-x-auto pb-1">
-      {chip("All", "/academy", active === null)}
+      {chip("All", basePath, active === null)}
       {categories.map((c) =>
-        chip(c, `/academy?category=${encodeURIComponent(c)}`, active === c)
+        chip(c, `${basePath}?category=${encodeURIComponent(c)}`, active === c)
       )}
     </div>
   );

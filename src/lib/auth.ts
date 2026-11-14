@@ -41,6 +41,22 @@ export async function getSessionRoles(): Promise<SessionRoles | null> {
     supabase.from("profiles").select("access_revoked_at").eq("id", user.id).maybeSingle(),
   ]);
 
+  // A course-only learner has a login but no profile, and is not part of the
+  // department. Every page and action behind this function belongs to the
+  // department, so to all of them a learner is simply not signed in — rather
+  // than a member with no roles, who could still reach screens that write to
+  // the department's own records. Asked only when there is no profile, so a
+  // member's request pays nothing for it, and only a learner row that
+  // positively exists changes the answer.
+  if (!profile) {
+    const { data: learner } = await supabase
+      .from("learners")
+      .select("id")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (learner) return null;
+  }
+
   return {
     userId: user.id,
     roles: (roleRows ?? []).map((r) => r.role as Role),

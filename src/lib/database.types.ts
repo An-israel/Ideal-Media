@@ -300,6 +300,21 @@ export type TrainingSeries = {
   updated_at: string | null;
 };
 
+/**
+ * A course-only Skills Academy account. Deliberately NOT a profile: learners
+ * never appear in the department's roster, attendance, welfare or reports.
+ */
+export type Learner = {
+  id: string;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  created_at: string;
+  updated_at: string | null;
+  suspended_at: string | null;
+  suspended_reason: string | null;
+};
+
 /** A single-use link that claims one roster record at signup. Service role only. */
 export type MemberClaimInvite = {
   id: string;
@@ -526,6 +541,7 @@ export type Database = {
       attendance_records: TableDef<AttendanceRecord>;
       attendance_submissions: TableDef<AttendanceSubmission>;
       monthly_attendance_summary: TableDef<MonthlyAttendanceSummary>;
+      learners: TableDef<Learner>;
       member_claim_invites: TableDef<MemberClaimInvite>;
       academy_courses: TableDef<AcademyCourse>;
       academy_modules: TableDef<AcademyModule>;
@@ -572,6 +588,10 @@ export type Database = {
           instructor_name: string | null;
           has_whatsapp: boolean | null;
         }[];
+      };
+      academy_access_ok: {
+        Args: Record<string, never>;
+        Returns: boolean;
       };
       academy_course_complete: {
         Args: { c_id: string; u_id: string };

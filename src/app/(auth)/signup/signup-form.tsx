@@ -130,6 +130,16 @@ export function SignupForm({
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {step === 1 && !invite && (
+          <p className="mb-4 rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-muted)]">
+            This sign-up is for members of the Ideal Life City media department. Only here for the
+            free courses?{" "}
+            <Link href="/learn/signup" className="text-[var(--accent)] hover:underline">
+              Join the Skills Academy instead
+            </Link>
+            .
+          </p>
+        )}
         {invite && (
           <p className="mb-4 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/8 px-3 py-2 text-sm">
             You&apos;re claiming the record the media team already holds for{" "}
